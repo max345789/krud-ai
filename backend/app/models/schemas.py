@@ -220,7 +220,9 @@ class BillingPortalResponse(BaseModel):
 
 class BillingWebhookResponse(BaseModel):
     processed: bool
-    status: SubscriptionStatus
+    # "skipped" means the event was acknowledged but required no DB change
+    # (unknown event type or unresolvable user).  All others are subscription states.
+    status: SubscriptionStatus | Literal["skipped"]
 
 
 # ── Release ───────────────────────────────────────────────────────────────────

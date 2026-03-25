@@ -200,7 +200,7 @@ def device_poll(request: Request, payload: DevicePollRequest) -> DevicePollRespo
         subscription=SubscriptionResponse(
             status=result["subscription_status"],
             trial_ends_at=result["trial_ends_at"],
-            price_id=settings.stripe_price_id,
+            price_id=settings.dodo_product_id,
             customer_id=result.get("billing_customer_id"),
             subscription_id=result.get("billing_subscription_id"),
         ),
@@ -229,7 +229,7 @@ def account_subscription(
     return SubscriptionResponse(
         status=current.get("subscription_status", user["subscription_status"]),
         trial_ends_at=current.get("trial_ends_at", user["trial_ends_at"]),
-        price_id=settings.stripe_price_id,
+        price_id=settings.dodo_product_id,
         customer_id=current.get("billing_customer_id"),
         subscription_id=current.get("billing_subscription_id"),
     )
@@ -317,7 +317,7 @@ def billing_mock_checkout(
     """
     safe_email = require_valid_email(email)
     return HTMLResponse(
-        render_billing_checkout_page(email=safe_email, plan=plan or settings.stripe_price_id)
+        render_billing_checkout_page(email=safe_email, plan=plan or settings.dodo_product_id)
     )
 
 
