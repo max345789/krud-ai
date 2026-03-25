@@ -316,6 +316,9 @@ async fn handle_prompt(
         reply.usage.completion_tokens,
     );
 
+    // Token budget bar — mirrors Claude Code's usage indicator.
+    ui::print_token_budget(reply.budget.used, reply.budget.limit, &reply.budget.resets_at);
+
     // Display each command proposal with action buttons.
     let total = reply.command_proposals.len();
     for (i, proposal) in reply.command_proposals.iter().enumerate() {

@@ -65,8 +65,10 @@ from app.models.schemas import (
     DeviceStartResponse,
     ReleaseResponse,
     SubscriptionResponse,
+    TokenBudget,
     UsageSummary,
 )
+from app.core.token_budget import _window_start, check_budget
 from app.services.billing import BillingService
 from app.services.chat import build_chat_reply, derive_session_title
 from app.services.device_auth import build_device_page
@@ -428,10 +430,15 @@ def post_message(
     """
     Send a message and receive an AI reply with optional command proposals.
 
-    Rate limit: 30/minute per user.  The LLM call is the most expensive
-    operation in this API; the limit prevents runaway token consumption while
-    allowing comfortable interactive use (one message every 2 seconds).
+    Rate limits applied in two layers:
+      1. Request rate  – 30/minute per user (slowapi), prevents request floods.
+      2. Token budget  – rolling 5-hour window per user (token_budget), mirrors
+                         Claude Code's usage-based limits and controls API spend.
+                         Trial users: 40,000 tokens / 5 h.
+                         Active users: 2,000,000 tokens / 5 h.
     """
+    from datetime import UTC, datetime
+
     db.require_active_access(user)
     session = db.get_chat_session(session_id=session_id, user_id=user["id"])
     if session is None:
@@ -439,6 +446,13 @@ def post_message(
             status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
         )
 
+    # ── token budget pre-check ────────────────────────────────────────────────
+    now = datetime.now(UTC)
+    window_start = _window_start(now)
+    used_before, oldest_at = db.get_token_usage_window(user["id"], since=window_start)
+    used, limit, budget_headers = check_budget(user, used_before, oldest_at)
+
+    # ── run the LLM call ──────────────────────────────────────────────────────
     db.add_chat_message(
         session_id=session_id,
         role="user",
@@ -466,7 +480,14 @@ def post_message(
         completion_tokens=generation.completion_tokens,
     )
 
-    return ChatSessionReply(
+    # ── recalculate budget with this call's tokens included ───────────────────
+    tokens_this_call = generation.prompt_tokens + generation.completion_tokens
+    used_after = used_before + tokens_this_call
+    from app.core.token_budget import get_budget_headers
+    budget_headers = get_budget_headers(used_after, limit, oldest_at, now)
+
+    from fastapi.responses import JSONResponse
+    reply = ChatSessionReply(
         session_id=session_id,
         text=generation.text,
         command_proposals=[
@@ -479,7 +500,15 @@ def post_message(
             prompt_tokens=generation.prompt_tokens,
             completion_tokens=generation.completion_tokens,
         ),
+        budget=TokenBudget(
+            used=used_after,
+            limit=limit,
+            resets_at=budget_headers["X-Token-Reset"],
+        ),
     )
+    # Return as JSONResponse so we can attach the X-Token-* headers the CLI reads.
+    response = JSONResponse(content=reply.model_dump(), headers=budget_headers)
+    return response
 
 
 # ── Releases ──────────────────────────────────────────────────────────────────

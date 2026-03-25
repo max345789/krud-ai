@@ -368,3 +368,130 @@ pub fn print_error(msg: &str) {
 pub fn print_info(msg: &str) {
     println!("  {} {}", "◆".cyan(), msg.dark_grey());
 }
+
+// ─── token budget bar ────────────────────────────────────────────────────────
+//
+//  ◆ 12,400 / 40,000 tokens  ▓▓▓▓▓▓░░░░░░░░░░░░░░  31%  resets 04:22
+//
+
+pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
+    if limit <= 0 {
+        return;
+    }
+
+    let bw = box_width();
+    let pct = ((used as f64 / limit as f64) * 100.0).min(100.0) as u64;
+
+    // Build filled/empty bar: 20 chars wide.
+    let bar_width: usize = 20;
+    let filled = ((pct as usize) * bar_width / 100).min(bar_width);
+    let empty = bar_width - filled;
+    let bar = format!("{}{}", "▓".repeat(filled), "░".repeat(empty));
+
+    // Colour the bar: green < 70%, yellow 70-89%, red ≥ 90%.
+    let coloured_bar = if pct < 70 {
+        bar.green().to_string()
+    } else if pct < 90 {
+        bar.yellow().to_string()
+    } else {
+        bar.red().to_string()
+    };
+
+    // Parse resets_at into a human "HH:MM" countdown if possible.
+    let reset_hint = parse_reset_hint(resets_at);
+
+    let label = format!(
+        "{} / {} tokens  {}  {}%  resets {}",
+        fmt_num(used),
+        fmt_num(limit),
+        coloured_bar,
+        pct,
+        reset_hint,
+    );
+
+    // Truncate to terminal width to avoid wrapping.
+    let max_len = bw.saturating_sub(6);
+    let display = if label.chars().count() > max_len {
+        let mut s: String = label.chars().take(max_len).collect();
+        s.push('…');
+        s
+    } else {
+        label
+    };
+
+    println!("  {} {}", "◆".cyan(), display.dark_grey());
+    println!();
+}
+
+fn fmt_num(n: i64) -> String {
+    // Simple thousands separator.
+    let s = n.to_string();
+    let mut result = String::new();
+    for (i, ch) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            result.push(',');
+        }
+        result.push(ch);
+    }
+    result.chars().rev().collect()
+}
+
+fn parse_reset_hint(resets_at: &str) -> String {
+    // Try to parse as RFC-3339 / ISO-8601 and compute time remaining.
+    // Fall back to just showing the raw string if parsing fails.
+    // Manual parse: look for T and extract date-time up to timezone.
+    // We rely on chrono not being available, so we do a minimal parse.
+    // Format expected: "2026-03-25T11:45:00+00:00" or similar.
+    if let Some(remaining_secs) = remaining_seconds(resets_at) {
+        if remaining_secs <= 0 {
+            return "now".to_string();
+        }
+        let h = remaining_secs / 3600;
+        let m = (remaining_secs % 3600) / 60;
+        if h > 0 {
+            return format!("{h}h {m:02}m");
+        }
+        return format!("{m}m");
+    }
+    // Fallback: just return the raw timestamp, trimmed.
+    resets_at.get(..16).unwrap_or(resets_at).to_string()
+}
+
+fn remaining_seconds(iso: &str) -> Option<i64> {
+    // Minimal ISO-8601 UTC parser without chrono.
+    // Handles "2026-03-25T11:45:00+00:00" and "2026-03-25T11:45:00Z".
+    let s = iso.trim();
+    let dt_part = s.split('+').next().unwrap_or(s).trim_end_matches('Z');
+    let parts: Vec<&str> = dt_part.splitn(2, 'T').collect();
+    if parts.len() != 2 {
+        return None;
+    }
+    let date_parts: Vec<u64> = parts[0].split('-').filter_map(|p| p.parse().ok()).collect();
+    let time_parts: Vec<u64> = parts[1].split(':').filter_map(|p| p.parse::<f64>().map(|f| f as u64).ok()).collect();
+    if date_parts.len() != 3 || time_parts.len() < 2 {
+        return None;
+    }
+    // Approximate unix timestamp (ignores leap seconds and DST — good enough for display).
+    let y = date_parts[0];
+    let mo = date_parts[1];
+    let d = date_parts[2];
+    let h = time_parts[0];
+    let mi = time_parts.get(1).copied().unwrap_or(0);
+    let sec = time_parts.get(2).copied().unwrap_or(0);
+
+    // Days since epoch (rough).
+    let leap_years = (1970..y).filter(|&yr| yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0)).count() as u64;
+    let days_in_year = y.saturating_sub(1970) * 365 + leap_years;
+    let month_days: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    let days_in_month: u64 = month_days[..((mo as usize).saturating_sub(1)).min(12)].iter().sum();
+    let total_days = days_in_year + days_in_month + d.saturating_sub(1);
+    let target_unix = total_days * 86400 + h * 3600 + mi * 60 + sec;
+
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let now_unix = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()?
+        .as_secs();
+
+    Some(target_unix as i64 - now_unix as i64)
+}

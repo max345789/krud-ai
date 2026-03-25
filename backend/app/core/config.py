@@ -102,6 +102,14 @@ class Settings:
     # Set to 0 to disable expiry (not recommended for production).
     session_ttl_days: int = int(os.getenv("KRUD_SESSION_TTL_DAYS", "90"))
 
+    # ── token budget (Claude Code-style rolling window) ───────────────────────
+    # Tokens are counted as prompt_tokens + completion_tokens per LLM call.
+    # The window is a rolling 5-hour period, matching Claude Code's behaviour.
+    # Limits are per-user; trial users get a tighter cap to control API spend.
+    token_budget_window_hours: int = int(os.getenv("KRUD_TOKEN_BUDGET_WINDOW_HOURS", "5"))
+    token_budget_trial: int = int(os.getenv("KRUD_TOKEN_BUDGET_TRIAL", "40000"))
+    token_budget_active: int = int(os.getenv("KRUD_TOKEN_BUDGET_ACTIVE", "2000000"))
+
     @property
     def allowed_origins(self) -> list[str]:
         """

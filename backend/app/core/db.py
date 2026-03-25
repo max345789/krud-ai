@@ -294,6 +294,34 @@ class Database:
                     record,
                 )
 
+    def get_token_usage_window(self, user_id: str, since: datetime) -> tuple[int, str | None]:
+        """
+        Return (total_tokens, oldest_event_at) for events in [since, now].
+
+        total_tokens  – sum of prompt_tokens + completion_tokens
+        oldest_event_at – ISO timestamp of the earliest event in the window,
+                          used to tell the client when the budget will start
+                          freeing up (rolling window behaviour).
+        """
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    select
+                        coalesce(sum(prompt_tokens + completion_tokens), 0) as total,
+                        min(created_at) as oldest
+                    from usage_events
+                    where user_id = %s and created_at >= %s
+                    """,
+                    (user_id, since.isoformat()),
+                )
+                row = cur.fetchone()
+        if not row:
+            return 0, None
+        total, oldest = row
+        oldest_iso = oldest.isoformat() if isinstance(oldest, datetime) else oldest
+        return int(total), oldest_iso
+
     def count_usage_events(self, user_id: str) -> int:
         with self.connect() as conn:
             with conn.cursor() as cur:

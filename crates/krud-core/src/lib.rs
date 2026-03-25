@@ -70,12 +70,20 @@ pub struct UsageSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenBudget {
+    pub used: i64,
+    pub limit: i64,
+    pub resets_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChatReply {
     pub session_id: String,
     pub text: String,
     pub command_proposals: Vec<CommandProposal>,
     pub provider: String,
     pub usage: UsageSummary,
+    pub budget: TokenBudget,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

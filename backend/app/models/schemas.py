@@ -191,12 +191,19 @@ class UsageSummary(BaseModel):
     completion_tokens: int = 0
 
 
+class TokenBudget(BaseModel):
+    used: int
+    limit: int
+    resets_at: str  # ISO-8601 UTC — when the oldest event in the window ages out
+
+
 class ChatSessionReply(BaseModel):
     session_id: str
     text: str
     command_proposals: list[CommandProposal]
     provider: str
     usage: UsageSummary
+    budget: TokenBudget
 
 
 # ── Billing ───────────────────────────────────────────────────────────────────
