@@ -18,7 +18,12 @@ class Database:
     _lock = Lock()
 
     def connect(self) -> psycopg2.extensions.connection:
-        conn = psycopg2.connect(settings.database_url)
+        url = settings.database_url
+        # Supabase requires SSL; append sslmode if not already in the URL
+        if url and "sslmode" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        conn = psycopg2.connect(url)
         psycopg2.extras.register_default_jsonb(conn)
         return conn
 

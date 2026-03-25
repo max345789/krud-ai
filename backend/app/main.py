@@ -128,4 +128,13 @@ app.include_router(router)
 
 @app.get("/healthz")
 def healthz() -> dict[str, str]:
-    return {"status": "ok"}
+    try:
+        with db.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        return {"status": "ok", "db": "ok"}
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger(__name__).error("DB health check failed: %s", exc)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=503, detail=f"DB unavailable: {exc}") from exc
