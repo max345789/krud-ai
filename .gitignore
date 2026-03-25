@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.local
+backend/.env
+.pytest_cache/
+.venv/
+__pycache__/
+*.pyc
+target/
+dist/
+build/
+.mypy_cache/
+backend/.coverage
+backend/krud.db
+
