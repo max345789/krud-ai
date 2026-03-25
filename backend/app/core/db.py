@@ -352,6 +352,21 @@ class Database:
             ).fetchone()
             return dict(row) if row else {}
 
+    def get_user_by_customer_id(self, customer_id: str) -> dict[str, str] | None:
+        """
+        Look up a user by their Dodo Payments customer ID.
+
+        Used as a fallback in webhook handling when metadata.user_id is absent —
+        for example on webhooks fired before the checkout session metadata is
+        propagated, or when a subscription is managed directly in the dashboard.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                "select * from users where billing_customer_id = ?",
+                (customer_id,),
+            ).fetchone()
+            return dict(row) if row else None
+
     def set_billing_customer(self, user_id: str, customer_id: str) -> None:
         with self._lock, self.connect() as conn:
             conn.execute(

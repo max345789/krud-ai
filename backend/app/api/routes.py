@@ -272,16 +272,27 @@ def billing_portal(
 @router.post("/v1/billing/webhook", response_model=BillingWebhookResponse)
 async def billing_webhook(request: Request) -> BillingWebhookResponse:
     """
-    Stripe webhook receiver.
+    Dodo Payments webhook receiver.
 
-    No rate limit — Stripe must always be able to reach this endpoint.
-    The payload is verified via the Stripe-Signature header in billing.py
-    (real mode) or parsed as trusted JSON (mock mode).
+    No rate limit — Dodo must always be able to reach this endpoint without
+    being throttled.
+
+    Dodo uses three headers for HMAC-SHA256 signature verification:
+      webhook-id        — unique event ID (used for idempotency)
+      webhook-signature — HMAC-SHA256 signature of "{id}.{timestamp}.{body}"
+      webhook-timestamp — Unix timestamp (seconds) of when the event was sent
+
+    In mock mode these headers are ignored and the raw JSON body is trusted.
     """
     payload = await request.body()
-    signature = request.headers.get("stripe-signature")
+    # Pass all three Dodo signing headers so billing.py can verify the signature.
+    webhook_headers = {
+        "webhook-id": request.headers.get("webhook-id", ""),
+        "webhook-signature": request.headers.get("webhook-signature", ""),
+        "webhook-timestamp": request.headers.get("webhook-timestamp", ""),
+    }
     try:
-        result = billing.handle_webhook(payload=payload, signature=signature)
+        result = billing.handle_webhook(payload=payload, webhook_headers=webhook_headers)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

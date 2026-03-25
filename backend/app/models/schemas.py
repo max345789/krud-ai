@@ -117,7 +117,7 @@ class AccountResponse(BaseModel):
 class SubscriptionResponse(BaseModel):
     status: SubscriptionStatus
     trial_ends_at: datetime
-    price_id: str
+    price_id: str  # Dodo Payments product ID (formerly Stripe price ID)
     customer_id: str | None = None
     subscription_id: str | None = None
 
@@ -210,12 +210,12 @@ class BillingOverviewResponse(BaseModel):
 
 class BillingCheckoutResponse(BaseModel):
     checkout_url: str
-    mode: Literal["mock", "stripe"]
+    mode: Literal["mock", "dodo"]
 
 
 class BillingPortalResponse(BaseModel):
     portal_url: str
-    mode: Literal["mock", "stripe"]
+    mode: Literal["mock", "dodo"]
 
 
 class BillingWebhookResponse(BaseModel):

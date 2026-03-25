@@ -60,10 +60,19 @@ class Settings:
     openai_timeout_seconds: int = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "45"))
 
     # ── billing — keys are read from env only, never hard-coded ─────────────
+    # billing_mode: "mock" (local dev, no real payments) or "dodo" (production)
     billing_mode: str = os.getenv("KRUD_BILLING_MODE", "mock")
-    stripe_price_id: str = os.getenv("KRUD_STRIPE_PRICE_ID", "price_krud_monthly")
-    stripe_secret_key: str | None = os.getenv("STRIPE_SECRET_KEY")
-    stripe_webhook_secret: str | None = os.getenv("STRIPE_WEBHOOK_SECRET")
+
+    # Dodo Payments — set as secrets in Render / environment; never hard-coded.
+    # DODO_PAYMENTS_API_KEY  : live or test API key from the Dodo dashboard
+    # DODO_PAYMENTS_WEBHOOK_KEY : webhook signing secret for signature verification
+    # DODO_PAYMENTS_PRODUCT_ID  : the product/plan ID to attach to new subscriptions
+    # DODO_PAYMENTS_ENVIRONMENT : "test_mode" (sandbox) or "live_mode" (production)
+    dodo_api_key: str | None = os.getenv("DODO_PAYMENTS_API_KEY")
+    dodo_webhook_key: str | None = os.getenv("DODO_PAYMENTS_WEBHOOK_KEY")
+    dodo_product_id: str = os.getenv("DODO_PAYMENTS_PRODUCT_ID", "")
+    dodo_environment: str = os.getenv("DODO_PAYMENTS_ENVIRONMENT", "test_mode")
+
     billing_success_url: str = os.getenv(
         "KRUD_BILLING_SUCCESS_URL", "http://127.0.0.1:8000/billing/success"
     )
@@ -116,10 +125,11 @@ class Settings:
             f"api_host={self.api_host!r}, "
             f"public_base_url={self.public_base_url!r}, "
             f"billing_mode={self.billing_mode!r}, "
+            f"dodo_environment={self.dodo_environment!r}, "
             f"openai_model={self.openai_model!r}, "
             f"openai_api_key={_mask(self.openai_api_key)}, "
-            f"stripe_secret_key={_mask(self.stripe_secret_key)}, "
-            f"stripe_webhook_secret={_mask(self.stripe_webhook_secret)}"
+            f"dodo_api_key={_mask(self.dodo_api_key)}, "
+            f"dodo_webhook_key={_mask(self.dodo_webhook_key)}"
             f")"
         )
 
