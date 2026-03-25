@@ -1,3 +1,7 @@
+mod rabbit;
+mod ui;
+
+use crossterm::style::Stylize;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -93,8 +97,8 @@ async fn login() -> Result<()> {
         .json::<DeviceStartResponse>()
         .await?;
 
-    println!("Open this page to approve Krud AI:");
-    println!("{}", response.verification_uri_complete);
+    ui::print_info("Open this page to approve Krud AI:");
+    ui::print_info(&response.verification_uri_complete);
     let _ = Command::new("open")
         .arg(&response.verification_uri_complete)
         .status();
@@ -120,12 +124,12 @@ async fn login() -> Result<()> {
                     .as_ref()
                     .map(|account| account.email.as_str())
                     .unwrap_or("unknown");
-                println!("Logged in as {email}");
+                ui::print_info(&format!("Logged in as {email}"));
                 break;
             }
             "expired" => return Err(anyhow!("The device code expired before approval")),
             _ => {
-                println!("Waiting for approval...");
+                ui::print_info("Waiting for browser approval…");
                 sleep(Duration::from_secs(response.interval_seconds)).await;
             }
         }
@@ -136,43 +140,48 @@ async fn login() -> Result<()> {
 
 fn logout() -> Result<()> {
     delete_session_token()?;
-    println!("Logged out of Krud AI");
+    ui::print_info("Logged out of Krud AI");
     Ok(())
 }
 
 async fn status(paths: &AppPaths) -> Result<()> {
     let token = read_session_token()?;
 
-    println!("Krud AI status");
-    println!("API base URL: {}", api_base_url());
+    let bw = ui::box_width();
+    println!();
+    println!("  ┌{}┐", "─".repeat(bw));
     println!(
-        "Keychain session: {}",
-        if token.is_some() {
-            "present"
-        } else {
-            "missing"
-        }
+        "  │  {}{}│",
+        "Krud AI  ·  status".cyan().bold(),
+        " ".repeat(bw.saturating_sub(22))
     );
-    println!("Socket path: {}", paths.socket_path.display());
-    println!("Daemon launch agent: {}", paths.launch_agent_path.display());
-    println!("Local database: {}", paths.db_path.display());
+    println!("  └{}┘", "─".repeat(bw));
+    println!();
+
+    ui::print_info(&format!("API:      {}", api_base_url()));
+    ui::print_info(&format!(
+        "Session:  {}",
+        if token.is_some() { "present" } else { "missing" }
+    ));
+    ui::print_info(&format!("Socket:   {}", paths.socket_path.display()));
+    ui::print_info(&format!("DB:       {}", paths.db_path.display()));
 
     if let Some(response) = ping_daemon(&paths.socket_path) {
-        println!("Daemon: {}", response.message);
+        ui::print_info(&format!("Daemon:   {}", response.message));
     } else {
-        println!("Daemon: not reachable");
+        ui::print_info("Daemon:   not reachable");
     }
 
     let counts = task_counts(paths)?;
-    println!(
-        "Tasks: queued={} running={} completed={} failed={}",
+    ui::print_info(&format!(
+        "Tasks:    queued={} running={} completed={} failed={}",
         counts.queued, counts.running, counts.completed, counts.failed
-    );
+    ));
     for task in recent_tasks(paths, 3)? {
-        println!(
+        ui::print_info(&format!(
             "  {} [{}] {} ({})",
             task.id, task.status, task.command, task.cwd
-        );
+        ));
     }
 
     if let Some(token) = token {
@@ -183,22 +192,38 @@ async fn status(paths: &AppPaths) -> Result<()> {
             .await?;
         if account.status().is_success() {
             let body: AccountResponse = account.json().await?;
-            println!(
-                "Account: {} (usage events: {})",
+            ui::print_info(&format!(
+                "Account:  {} (usage events: {})",
                 body.email,
                 body.usage_events.unwrap_or(0)
-            );
+            ));
         } else {
-            println!("Account: stored session token is invalid");
+            ui::print_info("Account:  stored session token is invalid");
         }
     }
 
+    println!();
     Ok(())
 }
 
 async fn chat(paths: &AppPaths, args: ChatArgs) -> Result<()> {
     let token = read_session_token()?.ok_or_else(|| anyhow!("Run `krud login` first"))?;
     let client = authenticated_client(&token)?;
+
+    // Fetch account email for the header (best-effort).
+    let email: Option<String> = async {
+        let resp = client
+            .get(format!("{}/v1/account/me", api_base_url()))
+            .send()
+            .await
+            .ok()?;
+        let body: AccountResponse = resp.json().await.ok()?;
+        let e = body.email;
+        Some(if e.len() > 28 { format!("{}…", &e[..27]) } else { e })
+    }
+    .await;
+
+    ui::print_header(email.as_deref());
 
     let session: serde_json::Value = client
         .post(format!("{}/v1/chat/sessions", api_base_url()))
@@ -216,19 +241,31 @@ async fn chat(paths: &AppPaths, args: ChatArgs) -> Result<()> {
     let session_title = session["title"].as_str().unwrap_or("CLI Chat").to_string();
     upsert_local_session(paths, &session_id, &session_title)?;
 
+    // One-shot mode: prompt provided as argument.
     if let Some(prompt) = args.prompt {
         handle_prompt(paths, &client, &session_id, &prompt).await?;
         return Ok(());
     }
 
-    println!("Krud AI interactive chat. Type `exit` to leave.");
+    // Interactive chat loop.
+    ui::print_welcome();
+
+    let mut frame_counter: usize = 0;
     loop {
-        print!("krud> ");
-        io::stdout().flush()?;
+        let cwd = env::current_dir()
+            .ok()
+            .and_then(|p| p.to_str().map(|s| s.to_string()));
+        ui::print_input_area(cwd.as_deref(), frame_counter);
+        frame_counter = frame_counter.wrapping_add(1);
+        ui::print_prompt();
+        // (Rabbit switches to Typing state as soon as we have raw-mode support.)
+
         let mut input = String::new();
         io::stdin().read_line(&mut input)?;
         let trimmed = input.trim();
-        if trimmed.eq_ignore_ascii_case("exit") {
+
+        if trimmed.eq_ignore_ascii_case("exit") || trimmed.eq_ignore_ascii_case("quit") {
+            ui::print_info("Goodbye.");
             break;
         }
         if trimmed.is_empty() {
@@ -246,51 +283,87 @@ async fn handle_prompt(
     session_id: &str,
     prompt: &str,
 ) -> Result<()> {
+    // Show what the user typed as a chat bubble.
+    ui::print_user_message(prompt);
+
     append_local_message(paths, session_id, "user", prompt)?;
+
     let cwd = env::current_dir()
         .ok()
         .and_then(|path| path.to_str().map(|value| value.to_string()));
-    let reply = client
+
+    // Animated rabbit while waiting for the AI response.
+    let thinking = ui::start_thinking();
+    let result = client
         .post(format!(
             "{}/v1/chat/sessions/{session_id}/messages",
             api_base_url()
         ))
         .json(&serde_json::json!({ "content": prompt, "cwd": cwd }))
         .send()
-        .await?
-        .error_for_status()?
-        .json::<ChatReply>()
-        .await?;
+        .await;
+    drop(thinking); // stops animation and clears rabbit
+
+    let reply: ChatReply = result?.error_for_status()?.json().await?;
 
     append_local_message(paths, session_id, "assistant", &reply.text)?;
-    println!("\n{}\n", reply.text);
-    println!(
-        "Provider: {} ({}) tokens {} in / {} out\n",
-        reply.provider, reply.usage.model, reply.usage.prompt_tokens, reply.usage.completion_tokens
+
+    // Display the assistant reply.
+    ui::print_assistant_message(
+        &reply.text,
+        &reply.usage.model,
+        reply.usage.prompt_tokens,
+        reply.usage.completion_tokens,
     );
 
-    for proposal in reply.command_proposals {
-        println!("Proposed command [{}]: {}", proposal.risk, proposal.command);
-        println!("Reason: {}", proposal.rationale);
-        print!("Run it now, queue it, or skip? [r/q/N] ");
-        io::stdout().flush()?;
+    // Token budget bar — mirrors Claude Code's usage indicator.
+    ui::print_token_budget(reply.budget.used, reply.budget.limit, &reply.budget.resets_at);
+
+    // Display each command proposal with action buttons.
+    let total = reply.command_proposals.len();
+    for (i, proposal) in reply.command_proposals.iter().enumerate() {
+        // Waiting rabbit above each proposal.
+        ui::print_rabbit_state(rabbit::RabbitState::Waiting, i % 2);
+        ui::print_command_proposal(&proposal.command, &proposal.rationale, &proposal.risk, i, total);
+
+        ui::print_decision_prompt();
 
         let mut decision = String::new();
         io::stdin().read_line(&mut decision)?;
         let decision = decision.trim().to_lowercase();
+
         match decision.as_str() {
             "r" => {
-                if let Err(error) = run_shell_command(&proposal.command) {
-                    eprintln!("Krud could not complete `{}`: {error}", proposal.command);
+                // Running rabbit while the command executes.
+                ui::print_rabbit_state(rabbit::RabbitState::Running, 0);
+                ui::print_info(&format!("Running: {}", proposal.command));
+                match run_shell_command(&proposal.command) {
+                    Ok(()) => {
+                        ui::print_rabbit_state(rabbit::RabbitState::Success, 0);
+                    }
+                    Err(error) => {
+                        ui::print_rabbit_state(rabbit::RabbitState::Error, 0);
+                        ui::print_error(&format!("Command failed: {error}"));
+                    }
                 }
             }
             "q" => {
-                if let Err(error) = queue_task(paths, &proposal.command) {
-                    eprintln!("Krud could not queue `{}`: {error}", proposal.command);
+                match queue_task(paths, &proposal.command) {
+                    Ok(()) => {
+                        ui::print_rabbit_state(rabbit::RabbitState::Success, 1);
+                        ui::print_info("Queued for background execution.");
+                    }
+                    Err(error) => {
+                        ui::print_rabbit_state(rabbit::RabbitState::Error, 0);
+                        ui::print_error(&format!("Could not queue: {error}"));
+                    }
                 }
             }
-            _ => {}
+            _ => {
+                ui::print_info("Skipped.");
+            }
         }
+        println!();
     }
 
     Ok(())
@@ -335,7 +408,7 @@ fn queue_task(paths: &AppPaths, task: &str) -> Result<()> {
             cwd,
         },
     )?;
-    println!("{}", response.message);
+    ui::print_info(&response.message);
     Ok(())
 }
 
@@ -352,11 +425,11 @@ async fn update() -> Result<()> {
         .json()
         .await?;
 
-    println!(
+    ui::print_info(&format!(
         "Latest version: {}",
         release["version"].as_str().unwrap_or("unknown")
-    );
-    println!("Use install/install.sh to wire a real binary swap step during release publishing.");
+    ));
+    ui::print_info("Use install/install.sh to wire a real binary swap step during release publishing.");
     Ok(())
 }
 
@@ -375,8 +448,8 @@ fn manage_daemon(paths: &AppPaths, action: DaemonAction) -> Result<()> {
                 fs::create_dir_all(parent)?;
             }
             fs::write(&paths.launch_agent_path, rendered)?;
-            println!("Wrote {}", paths.launch_agent_path.display());
-            println!("Daemon binary ready at {}", paths.daemon_binary.display());
+            ui::print_info(&format!("Wrote {}", paths.launch_agent_path.display()));
+            ui::print_info(&format!("Daemon binary ready at {}", paths.daemon_binary.display()));
         }
         DaemonAction::Start => {
             let status = Command::new("launchctl")
@@ -390,7 +463,7 @@ fn manage_daemon(paths: &AppPaths, action: DaemonAction) -> Result<()> {
             if !status.success() {
                 return Err(anyhow!("launchctl load failed with status {}", status));
             }
-            println!("Started {SERVICE_NAME}");
+            ui::print_info(&format!("Started {SERVICE_NAME}"));
         }
         DaemonAction::Stop => {
             let status = Command::new("launchctl")
@@ -404,7 +477,7 @@ fn manage_daemon(paths: &AppPaths, action: DaemonAction) -> Result<()> {
             if !status.success() {
                 return Err(anyhow!("launchctl unload failed with status {}", status));
             }
-            println!("Stopped {SERVICE_NAME}");
+            ui::print_info(&format!("Stopped {SERVICE_NAME}"));
         }
     }
 

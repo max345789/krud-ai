@@ -9,29 +9,57 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.0"
+
+      # ── database (Supabase PostgreSQL) ───────────────────────────────────────
+      # Set this in the Render dashboard → Environment → Secret Files / Env Vars.
+      # Format: postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+      - key: DATABASE_URL
+        sync: false
+
+      # ── server ──────────────────────────────────────────────────────────────
       - key: KRUD_PUBLIC_BASE_URL
         value: https://krud-api.onrender.com
       - key: KRUD_DOWNLOAD_BASE_URL
         value: https://downloads.krud.ai
       - key: KRUD_RELEASE_VERSION
         value: "0.1.0"
+
+      # ── billing (Dodo Payments) ──────────────────────────────────────────────
+      # Set KRUD_BILLING_MODE=dodo once your Dodo API keys are configured below.
+      # Leave as "mock" during initial setup to avoid accidental charges.
       - key: KRUD_BILLING_MODE
-        value: mock
-      - key: KRUD_STRIPE_PRICE_ID
-        value: price_krud_monthly
+        value: dodo
+
+      # DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_KEY — set as secrets in the
+      # Render dashboard (Environment → Secret Files / Env Vars).  Never commit.
+      - key: DODO_PAYMENTS_API_KEY
+        sync: false
+      - key: DODO_PAYMENTS_WEBHOOK_KEY
+        sync: false
+
+      # Product ID from your Dodo Payments dashboard (Products → copy ID).
+      - key: DODO_PAYMENTS_PRODUCT_ID
+        value: prod_placeholder
+
+      # "test_mode" uses the Dodo sandbox; switch to "live_mode" for production.
+      - key: DODO_PAYMENTS_ENVIRONMENT
+        value: test_mode
+
       - key: KRUD_TRIAL_DAYS
         value: "14"
-      - key: OPENAI_BASE_URL
-        value: https://api.openai.com/v1
-      - key: OPENAI_MODEL
-        value: gpt-4.1-mini
-      - key: OPENAI_TIMEOUT_SECONDS
-        value: "45"
       - key: KRUD_BILLING_SUCCESS_URL
         value: https://krud-api.onrender.com/billing/success
       - key: KRUD_BILLING_CANCEL_URL
         value: https://krud-api.onrender.com/billing/cancel
       - key: KRUD_BILLING_PORTAL_RETURN_URL
         value: https://krud-api.onrender.com/billing
+
+      # ── LLM ────────────────────────────────────────────────────────────────
+      - key: OPENAI_BASE_URL
+        value: https://api.openai.com/v1
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: OPENAI_TIMEOUT_SECONDS
+        value: "45"
       - key: OPENAI_API_KEY
         sync: false
