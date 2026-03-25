@@ -9,7 +9,7 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11.0"
+        value: "3.11"
 
       # ── database (Supabase PostgreSQL) ───────────────────────────────────────
       # Set this in the Render dashboard → Environment → Secret Files / Env Vars.
@@ -29,7 +29,7 @@ services:
       # Set KRUD_BILLING_MODE=dodo once your Dodo API keys are configured below.
       # Leave as "mock" during initial setup to avoid accidental charges.
       - key: KRUD_BILLING_MODE
-        value: dodo
+        value: mock
 
       # DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_KEY — set as secrets in the
       # Render dashboard (Environment → Secret Files / Env Vars).  Never commit.
