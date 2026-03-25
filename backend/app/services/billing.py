@@ -83,10 +83,29 @@ class BillingService:
 
     def handle_webhook(self, payload: bytes, signature: str | None = None) -> dict[str, str]:
         if settings.billing_mode == "mock" or not settings.stripe_secret_key:
-            data = json.loads(payload.decode("utf-8"))
+            # Mock mode: parse the raw JSON body directly.
+            # Validate that the payload is well-formed JSON and that required
+            # fields are present and sane before touching the database.
+            try:
+                data = json.loads(payload.decode("utf-8"))
+            except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                raise ValueError("Mock webhook payload is not valid JSON") from exc
+
+            email = data.get("email", "")
+            if not isinstance(email, str) or not email.strip():
+                raise ValueError("Mock webhook payload must include a non-empty 'email' field")
+
+            # Import here to avoid a circular import at module load time.
+            from app.core.security import validate_subscription_status
+            raw_status = data.get("status", "active")
+            try:
+                safe_status = validate_subscription_status(str(raw_status))
+            except ValueError as exc:
+                raise ValueError(f"Mock webhook: {exc}") from exc
+
             user = self.db.update_subscription_state(
-                email=data["email"].lower(),
-                status_value=data.get("status", "active"),
+                email=email.strip().lower(),
+                status_value=safe_status,
                 customer_id=data.get("customer_id"),
                 subscription_id=data.get("subscription_id"),
             )
