@@ -10,6 +10,12 @@ services:
       - key: PYTHON_VERSION
         value: "3.11.0"
 
+      # ── database (Supabase PostgreSQL) ───────────────────────────────────────
+      # Set this in the Render dashboard → Environment → Secret Files / Env Vars.
+      # Format: postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+      - key: DATABASE_URL
+        sync: false
+
       # ── server ──────────────────────────────────────────────────────────────
       - key: KRUD_PUBLIC_BASE_URL
         value: https://krud-api.onrender.com

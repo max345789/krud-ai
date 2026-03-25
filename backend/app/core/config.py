@@ -51,7 +51,9 @@ class Settings:
     release_version: str = os.getenv("KRUD_RELEASE_VERSION", "0.1.0")
 
     # ── database ─────────────────────────────────────────────────────────────
-    database_path: Path = Path(os.getenv("KRUD_DATABASE_PATH", "krud.db"))
+    # PostgreSQL connection string (Supabase).  Required in production.
+    # Example: postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
+    database_url: str = os.getenv("DATABASE_URL", "")
 
     # ── LLM — key is read from env only, never hard-coded ────────────────────
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
