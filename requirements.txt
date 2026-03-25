@@ -1,6 +1,10 @@
+# Root-level requirements.txt kept in sync with backend/requirements.txt.
+# Render uses backend/requirements.txt (rootDir: backend in render.yaml).
 email-validator>=2.2,<3.0
 fastapi>=0.115,<1.0
 httpx>=0.28,<1.0
-stripe>=11.6,<12.0
+psycopg2-binary>=2.9,<3.0
+slowapi>=0.1.9,<1.0
+dodopayments==1.87.2
 uvicorn[standard]>=0.32,<1.0
 python-multipart>=0.0.18,<1.0
