@@ -27,13 +27,17 @@ Security hardening applied here
 """
 from __future__ import annotations
 
+import logging
 import os
+import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+
+logging.basicConfig(level=logging.INFO)
 
 from app.api.routes import router
 from app.core.config import settings
@@ -82,6 +86,18 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONRe
         },
         headers={"Retry-After": str(retry_after)},
     )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Log full traceback for every unhandled 500 so Render logs show the root cause."""
+    logging.getLogger(__name__).error(
+        "Unhandled exception on %s %s\n%s",
+        request.method,
+        request.url.path,
+        traceback.format_exc(),
+    )
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
