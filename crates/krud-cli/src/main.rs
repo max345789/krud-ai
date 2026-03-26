@@ -290,17 +290,19 @@ async fn handle_prompt(
         .ok()
         .and_then(|path| path.to_str().map(|value| value.to_string()));
 
-    // Inline thinking indicator — no background thread, no glitches.
-    ui::print_thinking();
-    let result = client
-        .post(format!(
-            "{}/v1/chat/sessions/{session_id}/messages",
-            api_base_url()
-        ))
-        .json(&serde_json::json!({ "content": prompt, "cwd": cwd }))
-        .send()
-        .await;
-    ui::clear_thinking(); // erase the thinking line in-place
+    // Animated rabbit while waiting — drops cleanly when API call returns.
+    let result = {
+        let _anim = rabbit::start_animation(rabbit::RabbitState::Thinking);
+        client
+            .post(format!(
+                "{}/v1/chat/sessions/{session_id}/messages",
+                api_base_url()
+            ))
+            .json(&serde_json::json!({ "content": prompt, "cwd": cwd }))
+            .send()
+            .await
+        // _anim drops here: clears rabbit area, cursor returns to top of it
+    };
 
     let reply: ChatReply = result?.error_for_status()?.json().await?;
 

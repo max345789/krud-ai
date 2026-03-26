@@ -29,9 +29,14 @@
 //!  ╭─ ~/Projects/krud ──────────────────────────────────────
 //!  │  › _
 
-use crossterm::style::Stylize;
+use crossterm::style::{Color, Stylize};
 use crossterm::terminal;
 use std::io::Write;
+
+// ── purple palette (matches rabbit.rs) ──────────────────────────────────────
+
+const PURPLE: Color = Color::Rgb { r: 168, g: 85, b: 247 };
+const PURPLE_DIM: Color = Color::Rgb { r: 120, g: 60, b: 180 };
 
 // ─── sizing ─────────────────────────────────────────────────────────────────
 
@@ -115,7 +120,7 @@ pub fn print_header(email: Option<&str>) {
     println!("  ╭{}╮", "─".repeat(bw));
     println!(
         "  │  {}{}{}  │",
-        brand_raw.cyan().bold(),
+        brand_raw.with(PURPLE).bold(),
         " ".repeat(gap),
         right_raw.dark_grey()
     );
@@ -126,7 +131,11 @@ pub fn print_header(email: Option<&str>) {
 // ─── welcome hint ───────────────────────────────────────────────────────────
 
 pub fn print_welcome() {
-    println!("  {} Type your request and press Enter.  Type {} to quit.", "◆".dark_grey(), "exit".white());
+    println!(
+        "  {} Type your request and press Enter.  Type {} to quit.",
+        "◆".with(PURPLE),
+        "exit".white()
+    );
     println!();
 }
 
@@ -170,7 +179,7 @@ pub fn print_user_message(text: &str) {
 //  without scrolling or redrawing anything else on screen.
 
 pub fn print_thinking() {
-    print!("  {} Thinking…", "◆".cyan().bold());
+    print!("  {} Thinking…", "◆".with(PURPLE).bold());
     std::io::stdout().flush().ok();
 }
 
@@ -204,10 +213,10 @@ pub fn print_assistant_message(
 
     println!(
         "  {}{}{}{}{}{}",
-        brand_raw.cyan().bold(),
-        sep.dark_grey(),
+        brand_raw.with(PURPLE).bold(),
+        sep.with(PURPLE_DIM),
         model.dark_grey(),
-        sep.dark_grey(),
+        sep.with(PURPLE_DIM),
         tok_raw.dark_grey(),
         " ".repeat(gap)
     );
@@ -331,7 +340,7 @@ pub fn print_input_area(cwd: Option<&str>) {
 
 /// Print the `›` prompt — cursor sits here, no newline.
 pub fn print_prompt() {
-    print!("  │  {} ", "›".cyan().bold());
+    print!("  │  {} ", "›".with(PURPLE).bold());
     std::io::stdout().flush().ok();
 }
 
@@ -358,7 +367,7 @@ pub fn print_error(msg: &str) {
 }
 
 pub fn print_info(msg: &str) {
-    println!("  {} {}", "◆".cyan(), msg.dark_grey());
+    println!("  {} {}", "◆".with(PURPLE), msg.dark_grey());
 }
 
 // ─── token budget bar ────────────────────────────────────────────────────────
@@ -406,7 +415,7 @@ pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
         label
     };
 
-    println!("  {} {}", "◆".cyan(), display.dark_grey());
+    println!("  {} {}", "◆".with(PURPLE), display.dark_grey());
     println!();
 }
 
