@@ -21,7 +21,7 @@ services:
       - key: KRUD_PUBLIC_BASE_URL
         value: https://krud-api.onrender.com
       - key: KRUD_DOWNLOAD_BASE_URL
-        value: https://downloads.krud.ai
+        value: https://github.com/max345789/krud-ai/releases/download
       - key: KRUD_RELEASE_VERSION
         value: "0.1.0"
 

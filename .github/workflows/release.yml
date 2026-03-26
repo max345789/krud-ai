@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: krud-darwin-aarch64
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: krud-darwin-x86_64
+
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: krud-linux-x86_64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.target }}-cargo-
+
+      - name: Build
+        run: |
+          cargo build --release \
+            --manifest-path crates/krud-cli/Cargo.toml \
+            --target ${{ matrix.target }}
+
+      - name: Package
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          BINARY=target/${{ matrix.target }}/release/krud
+          ARCHIVE=${{ matrix.artifact }}.tar.gz
+          tar -czf "$ARCHIVE" -C "$(dirname $BINARY)" "$(basename $BINARY)"
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ env.ARCHIVE }}
+
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          find . -name "*.tar.gz" -exec mv {} . \; 2>/dev/null || true
+          find . -maxdepth 1 -name "*.tar.gz" | xargs sha256sum > krud-checksums.txt
+          cat krud-checksums.txt
+
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "krud v${{ env.VERSION }}"
+          body: |
+            ## Install
+
+            ```bash
+            curl -fsSL https://install.krud.ai | sh
+            ```
+
+            Or download manually from the assets below.
+
+            ## What's new
+            See [CHANGELOG](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+          files: |
+            dist/*.tar.gz
+            dist/krud-checksums.txt
+          draft: false
+          prerelease: false

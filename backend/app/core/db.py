@@ -185,7 +185,7 @@ class Database:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute(
                     """
-                    select users.*
+                    select users.*, auth_sessions.created_at as session_created_at
                     from auth_sessions
                     join users on users.id = auth_sessions.user_id
                     where auth_sessions.token = %s
@@ -195,6 +195,18 @@ class Database:
                 record = self._row(cur.fetchone())
         if not record:
             return None
+        # Enforce session TTL
+        session_created_at = record.pop("session_created_at", None)
+        if session_created_at:
+            created = (
+                datetime.fromisoformat(session_created_at)
+                if isinstance(session_created_at, str)
+                else session_created_at
+            )
+            if not created.tzinfo:
+                created = created.replace(tzinfo=UTC)
+            if self._now() > created + timedelta(days=settings.session_ttl_days):
+                return None  # expired — caller will return 401
         record["usage_events"] = self.count_usage_events(record["id"])
         return record
 

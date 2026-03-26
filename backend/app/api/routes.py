@@ -525,13 +525,15 @@ def latest_release(request: Request, channel: str = "stable") -> ReleaseResponse
     safe_channel = require_valid_channel(channel)
     version = settings.release_version
     base = settings.download_base_url.rstrip("/")
+    tag = f"v{version}"
     return ReleaseResponse(
         channel=safe_channel,
         version=version,
-        notes="Initial Krud AI bootstrap release",
+        notes=f"krud {tag} — see https://github.com/max345789/krud-ai/releases/tag/{tag}",
         assets={
-            "darwin-aarch64": f"{base}/{version}/krud-darwin-aarch64.tar.gz",
-            "darwin-x86_64": f"{base}/{version}/krud-darwin-x86_64.tar.gz",
+            "darwin-aarch64": f"{base}/{tag}/krud-darwin-aarch64.tar.gz",
+            "darwin-x86_64":  f"{base}/{tag}/krud-darwin-x86_64.tar.gz",
+            "linux-x86_64":   f"{base}/{tag}/krud-linux-x86_64.tar.gz",
         },
-        signature_asset=f"{base}/{version}/krud-checksums.txt",
+        signature_asset=f"{base}/{tag}/krud-checksums.txt",
     )
