@@ -23,7 +23,7 @@ services:
       - key: KRUD_DOWNLOAD_BASE_URL
         value: https://github.com/max345789/krud-ai/releases/download
       - key: KRUD_RELEASE_VERSION
-        value: "0.1.0"
+        value: "0.2.0"
 
       # ── billing (Dodo Payments) ──────────────────────────────────────────────
       # Set KRUD_BILLING_MODE=dodo once your Dodo API keys are configured below.
