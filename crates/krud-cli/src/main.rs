@@ -250,13 +250,11 @@ async fn chat(paths: &AppPaths, args: ChatArgs) -> Result<()> {
     // Interactive chat loop.
     ui::print_welcome();
 
-    let mut frame_counter: usize = 0;
     loop {
         let cwd = env::current_dir()
             .ok()
             .and_then(|p| p.to_str().map(|s| s.to_string()));
-        ui::print_input_area(cwd.as_deref(), frame_counter);
-        frame_counter = frame_counter.wrapping_add(1);
+        ui::print_input_area(cwd.as_deref());
         ui::print_prompt();
         // (Rabbit switches to Typing state as soon as we have raw-mode support.)
 
@@ -292,8 +290,8 @@ async fn handle_prompt(
         .ok()
         .and_then(|path| path.to_str().map(|value| value.to_string()));
 
-    // Animated rabbit while waiting for the AI response.
-    let thinking = ui::start_thinking();
+    // Inline thinking indicator — no background thread, no glitches.
+    ui::print_thinking();
     let result = client
         .post(format!(
             "{}/v1/chat/sessions/{session_id}/messages",
@@ -302,7 +300,7 @@ async fn handle_prompt(
         .json(&serde_json::json!({ "content": prompt, "cwd": cwd }))
         .send()
         .await;
-    drop(thinking); // stops animation and clears rabbit
+    ui::clear_thinking(); // erase the thinking line in-place
 
     let reply: ChatReply = result?.error_for_status()?.json().await?;
 
@@ -322,8 +320,6 @@ async fn handle_prompt(
     // Display each command proposal with action buttons.
     let total = reply.command_proposals.len();
     for (i, proposal) in reply.command_proposals.iter().enumerate() {
-        // Waiting rabbit above each proposal.
-        ui::print_rabbit_state(rabbit::RabbitState::Waiting, i % 2);
         ui::print_command_proposal(&proposal.command, &proposal.rationale, &proposal.risk, i, total);
 
         ui::print_decision_prompt();
@@ -334,15 +330,12 @@ async fn handle_prompt(
 
         match decision.as_str() {
             "r" => {
-                // Running rabbit while the command executes.
-                ui::print_rabbit_state(rabbit::RabbitState::Running, 0);
                 ui::print_info(&format!("Running: {}", proposal.command));
                 match run_shell_command(&proposal.command) {
                     Ok(()) => {
-                        ui::print_rabbit_state(rabbit::RabbitState::Success, 0);
+                        ui::print_info("Done.");
                     }
                     Err(error) => {
-                        ui::print_rabbit_state(rabbit::RabbitState::Error, 0);
                         ui::print_error(&format!("Command failed: {error}"));
                     }
                 }
@@ -350,11 +343,9 @@ async fn handle_prompt(
             "q" => {
                 match queue_task(paths, &proposal.command) {
                     Ok(()) => {
-                        ui::print_rabbit_state(rabbit::RabbitState::Success, 1);
                         ui::print_info("Queued for background execution.");
                     }
                     Err(error) => {
-                        ui::print_rabbit_state(rabbit::RabbitState::Error, 0);
                         ui::print_error(&format!("Could not queue: {error}"));
                     }
                 }

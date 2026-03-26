@@ -1,32 +1,33 @@
-//! Terminal chat UI for krud — feels like a real chat interface.
+//! Terminal chat UI for krud — clean scrolling chat with a single mascot.
 //!
 //! Layout overview:
 //!
 //!  ╭──────────────────────────────────────────────────────────────────╮
-//!  │  ◆ krud AI                            AI terminal agent · user@ │  ← header
+//!  │  ◆ krud AI                            AI terminal agent · user@ │  ← header (printed once)
 //!  ╰──────────────────────────────────────────────────────────────────╯
 //!
-//!                                ╭─────────────────────────────────────╮
-//!                                │  list all large files in current    │  ← user bubble (right)
-//!                                │  directory                          │
-//!                                ╰────────────────────────── You ──────╯
+//!  [chat messages scroll here naturally as the terminal scrolls up]
 //!
-//!  ◆ krud AI  ·  gpt-4o-mini  ·  8↑ 42↓                                ← assistant header
-//!  ────────────────────────────────────────────────────────────────────
-//!  I'll help you find large files. I can use `find` for that...
+//!                                ╭──────────────────────────────────╮
+//!                                │  your message                    │  ← user bubble (right)
+//!                                ╰─────────────────── You ──────────╯
 //!
-//!  ╭─ Command 1/1 ──────────────────────────────────────── ⚠ medium ─╮
-//!  │  $ find . -type f -size +10M | sort -rh                         │
-//!  │                                                                  │
-//!  │    Finds files larger than 10MB, sorted by size descending      │
-//!  ├──────────────────────────────────────────────────────────────────┤
-//!  │  [r] Run now   [q] Queue   [s] Skip                             │
-//!  ╰──────────────────────────────────────────────────────────────────╯
+//!  ◆ Thinking…                                                          ← thinking line (erased)
+//!    OR
+//!  ◆ krud AI  ·  gpt-4o-mini  ·  8↑ 42↓                               ← assistant header
+//!  ─────────────────────────────────────────────────────────────────────
+//!  I'll help you find large files...
 //!
-//!  [rabbit art]
+//!  ╭─ Command 1/1 ──────────────────────────── ⚠ medium ─╮
+//!  │  $ find . -type f -size +10M                         │
+//!  ├──────────────────────────────────────────────────────┤
+//!  │  [r] Run now   [q] Queue   [s] Skip                  │
+//!  ╰──────────────────────────────────────────────────────╯
 //!
-//!  ╭─ ~/Projects/krud ──────────────────────────────────────────────
-//!  │  ›
+//!  [single static robot, drawn once above each input box]
+//!
+//!  ╭─ ~/Projects/krud ──────────────────────────────────────
+//!  │  › _
 
 use crossterm::style::Stylize;
 use crossterm::terminal;
@@ -44,7 +45,7 @@ pub fn box_width() -> usize {
 }
 
 fn inner_width(bw: usize) -> usize {
-    bw.saturating_sub(4) // accounts for "  " padding each side inside box
+    bw.saturating_sub(4)
 }
 
 // ─── word-wrap ──────────────────────────────────────────────────────────────
@@ -82,7 +83,6 @@ pub fn wrap(text: &str, width: usize) -> Vec<String> {
 
 // ─── low-level box drawing ──────────────────────────────────────────────────
 
-/// One content row with 2-space inner padding each side.
 fn pline(colored: impl std::fmt::Display, raw_len: usize, bw: usize) {
     let inner = inner_width(bw);
     let pad = inner.saturating_sub(raw_len);
@@ -126,13 +126,7 @@ pub fn print_header(email: Option<&str>) {
 // ─── welcome hint ───────────────────────────────────────────────────────────
 
 pub fn print_welcome() {
-    let bw = box_width();
-    let iw = inner_width(bw);
-    let hint = "Type your request and press Enter.  Type exit to quit.";
-    let pad = iw.saturating_sub(hint.chars().count());
-    println!("  ╭{}╮", "─".repeat(bw));
-    println!("  │  {}{}  │", hint.dark_grey(), " ".repeat(pad));
-    println!("  ╰{}╯", "─".repeat(bw));
+    println!("  {} Type your request and press Enter.  Type {} to quit.", "◆".dark_grey(), "exit".white());
     println!();
 }
 
@@ -140,7 +134,6 @@ pub fn print_welcome() {
 
 pub fn print_user_message(text: &str) {
     let tw = term_width();
-    // Bubble takes ~68% of terminal width, pushed to the right.
     let bw = (tw * 68 / 100).min(72).max(38);
     let iw = bw.saturating_sub(4);
     let left = tw.saturating_sub(bw + 4).max(2);
@@ -155,7 +148,6 @@ pub fn print_user_message(text: &str) {
         println!("{}│  {}{}  │", indent, line, " ".repeat(pad));
     }
 
-    // Bottom label: "╰───── You ──────────────────╯"
     let you = " You ";
     let you_len = you.chars().count();
     let total_dashes = bw.saturating_sub(you_len);
@@ -171,6 +163,23 @@ pub fn print_user_message(text: &str) {
     println!();
 }
 
+// ─── thinking indicator ──────────────────────────────────────────────────────
+//
+//  Printed inline (no newline) so we can erase it cleanly when the response
+//  arrives.  Uses \r + ANSI CSI 2K (erase entire line) to clear in-place
+//  without scrolling or redrawing anything else on screen.
+
+pub fn print_thinking() {
+    print!("  {} Thinking…", "◆".cyan().bold());
+    std::io::stdout().flush().ok();
+}
+
+/// Erase the thinking line so the response can be printed in its place.
+pub fn clear_thinking() {
+    print!("\r\x1B[2K");
+    std::io::stdout().flush().ok();
+}
+
 // ─── assistant message (left, no box) ───────────────────────────────────────
 
 pub fn print_assistant_message(
@@ -182,7 +191,6 @@ pub fn print_assistant_message(
     let bw = box_width();
     let iw = inner_width(bw);
 
-    // Header: "◆ krud AI  ·  model  ·  Nt↑  Mt↓"
     let brand_raw = "◆ krud AI";
     let brand_len = brand_raw.chars().count();
     let sep = "  ·  ";
@@ -205,7 +213,7 @@ pub fn print_assistant_message(
     );
     println!("  {}", "─".repeat(bw + 2));
 
-    let lines = wrap(text, iw + 2); // full inner width (no box walls)
+    let lines = wrap(text, iw + 2);
     for line in &lines {
         if line.is_empty() {
             println!();
@@ -236,15 +244,12 @@ pub fn print_command_proposal(
     let bw = box_width();
     let iw = inner_width(bw);
 
-    // ── header ────────────────────────────────────────────────────────────────
     let label_raw = format!("Command {}/{}", index + 1, total);
     let label_len = label_raw.chars().count();
     let risk_raw = format!("⚠ {}", risk);
     let risk_len = risk_raw.chars().count();
     let rc = risk_color(risk);
 
-    // "╭─ Command 1/1 ──────────────────────────────── ⚠ medium ─╮"
-    // dashes = bw - 2 (for " " each side of label) - label_len - 1 (space before risk) - risk_len - 2 ("─╮")
     let inner_header = bw.saturating_sub(2 + label_len + 1 + risk_len + 2);
     println!(
         "  ╭─ {} {}─ {} ─╮",
@@ -253,8 +258,7 @@ pub fn print_command_proposal(
         risk_raw.with(rc).bold()
     );
 
-    // ── command line ──────────────────────────────────────────────────────────
-    let cmd_max = iw.saturating_sub(2); // "$ " prefix
+    let cmd_max = iw.saturating_sub(2);
     let cmd_display: String = if command.chars().count() > cmd_max {
         command.chars().take(cmd_max.saturating_sub(1)).collect::<String>() + "…"
     } else {
@@ -270,13 +274,11 @@ pub fn print_command_proposal(
     );
     println!("  │{}│", " ".repeat(bw));
 
-    // ── rationale ─────────────────────────────────────────────────────────────
     let rat_lines = wrap(rationale, iw.saturating_sub(2));
     for line in &rat_lines {
         pindented(line.as_str().dark_grey(), line.chars().count(), bw);
     }
 
-    // ── action bar ────────────────────────────────────────────────────────────
     println!("  ├{}┤", "─".repeat(bw));
     let actions_raw_len = "[r] Run now   [q] Queue   [s] Skip".chars().count();
     pline(
@@ -293,13 +295,15 @@ pub fn print_command_proposal(
     println!();
 }
 
-// ─── input area ─────────────────────────────────────────────────────────────
+// ─── input area — single static robot + open input box ───────────────────────
+//
+//  The robot is drawn ONCE per prompt, always in the Idle pose (frame 0).
+//  No background animation thread — eliminates all glitches.
 
-/// Render the rabbit, then an open-ended input box.
-/// The box has no bottom border — the cursor sits inside it.
-pub fn print_input_area(cwd: Option<&str>, rabbit_frame: usize) {
+pub fn print_input_area(cwd: Option<&str>) {
     use crate::rabbit::{self, RabbitState};
-    rabbit::print_rabbit(RabbitState::Idle, rabbit_frame);
+    // Single static robot — always frame 0, always Idle pose.
+    rabbit::print_rabbit(RabbitState::Idle, 0);
 
     let bw = box_width();
 
@@ -312,10 +316,9 @@ pub fn print_input_area(cwd: Option<&str>, rabbit_frame: usize) {
         }
     });
 
-    // "╭─ ~/Projects/krud ───────────────────────────────────────────"
     if let Some(ref short) = cwd_short {
         let short_len = short.chars().count();
-        let dashes = bw.saturating_sub(3 + short_len + 1); // "─ " + short + " "
+        let dashes = bw.saturating_sub(3 + short_len + 1);
         println!(
             "  ╭─ {} {}",
             short.as_str().dark_grey(),
@@ -324,7 +327,6 @@ pub fn print_input_area(cwd: Option<&str>, rabbit_frame: usize) {
     } else {
         println!("  ╭{}", "─".repeat(bw + 1));
     }
-    // The calling code will print "  │  ›  " on the same open box.
 }
 
 /// Print the `›` prompt — cursor sits here, no newline.
@@ -333,20 +335,10 @@ pub fn print_prompt() {
     std::io::stdout().flush().ok();
 }
 
-/// Print the decision prompt (inline, used after command proposal).
+/// Print the decision prompt (inline, after command proposal).
 pub fn print_decision_prompt() {
     print!("  │  {} ", "›".dark_grey());
     std::io::stdout().flush().ok();
-}
-
-// ─── rabbit helpers ─────────────────────────────────────────────────────────
-
-pub fn start_thinking() -> crate::rabbit::AnimationHandle {
-    crate::rabbit::start_animation(crate::rabbit::RabbitState::Thinking)
-}
-
-pub fn print_rabbit_state(state: crate::rabbit::RabbitState, frame: usize) {
-    crate::rabbit::print_rabbit(state, frame);
 }
 
 // ─── error / info ────────────────────────────────────────────────────────────
@@ -372,23 +364,19 @@ pub fn print_info(msg: &str) {
 // ─── token budget bar ────────────────────────────────────────────────────────
 //
 //  ◆ 12,400 / 40,000 tokens  ▓▓▓▓▓▓░░░░░░░░░░░░░░  31%  resets 04:22
-//
 
 pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
     if limit <= 0 {
         return;
     }
 
-    let bw = box_width();
     let pct = ((used as f64 / limit as f64) * 100.0).min(100.0) as u64;
 
-    // Build filled/empty bar: 20 chars wide.
     let bar_width: usize = 20;
     let filled = ((pct as usize) * bar_width / 100).min(bar_width);
     let empty = bar_width - filled;
     let bar = format!("{}{}", "▓".repeat(filled), "░".repeat(empty));
 
-    // Colour the bar: green < 70%, yellow 70-89%, red ≥ 90%.
     let coloured_bar = if pct < 70 {
         bar.green().to_string()
     } else if pct < 90 {
@@ -397,9 +385,9 @@ pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
         bar.red().to_string()
     };
 
-    // Parse resets_at into a human "HH:MM" countdown if possible.
     let reset_hint = parse_reset_hint(resets_at);
 
+    let bw = box_width();
     let label = format!(
         "{} / {} tokens  {}  {}%  resets {}",
         fmt_num(used),
@@ -409,9 +397,8 @@ pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
         reset_hint,
     );
 
-    // Truncate to terminal width to avoid wrapping.
     let max_len = bw.saturating_sub(6);
-    let display = if label.chars().count() > max_len {
+    let display: String = if label.chars().count() > max_len {
         let mut s: String = label.chars().take(max_len).collect();
         s.push('…');
         s
@@ -424,7 +411,6 @@ pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
 }
 
 fn fmt_num(n: i64) -> String {
-    // Simple thousands separator.
     let s = n.to_string();
     let mut result = String::new();
     for (i, ch) in s.chars().rev().enumerate() {
@@ -437,11 +423,6 @@ fn fmt_num(n: i64) -> String {
 }
 
 fn parse_reset_hint(resets_at: &str) -> String {
-    // Try to parse as RFC-3339 / ISO-8601 and compute time remaining.
-    // Fall back to just showing the raw string if parsing fails.
-    // Manual parse: look for T and extract date-time up to timezone.
-    // We rely on chrono not being available, so we do a minimal parse.
-    // Format expected: "2026-03-25T11:45:00+00:00" or similar.
     if let Some(remaining_secs) = remaining_seconds(resets_at) {
         if remaining_secs <= 0 {
             return "now".to_string();
@@ -453,13 +434,10 @@ fn parse_reset_hint(resets_at: &str) -> String {
         }
         return format!("{m}m");
     }
-    // Fallback: just return the raw timestamp, trimmed.
     resets_at.get(..16).unwrap_or(resets_at).to_string()
 }
 
 fn remaining_seconds(iso: &str) -> Option<i64> {
-    // Minimal ISO-8601 UTC parser without chrono.
-    // Handles "2026-03-25T11:45:00+00:00" and "2026-03-25T11:45:00Z".
     let s = iso.trim();
     let dt_part = s.split('+').next().unwrap_or(s).trim_end_matches('Z');
     let parts: Vec<&str> = dt_part.splitn(2, 'T').collect();
@@ -467,11 +445,13 @@ fn remaining_seconds(iso: &str) -> Option<i64> {
         return None;
     }
     let date_parts: Vec<u64> = parts[0].split('-').filter_map(|p| p.parse().ok()).collect();
-    let time_parts: Vec<u64> = parts[1].split(':').filter_map(|p| p.parse::<f64>().map(|f| f as u64).ok()).collect();
+    let time_parts: Vec<u64> = parts[1]
+        .split(':')
+        .filter_map(|p| p.parse::<f64>().map(|f| f as u64).ok())
+        .collect();
     if date_parts.len() != 3 || time_parts.len() < 2 {
         return None;
     }
-    // Approximate unix timestamp (ignores leap seconds and DST — good enough for display).
     let y = date_parts[0];
     let mo = date_parts[1];
     let d = date_parts[2];
@@ -479,11 +459,13 @@ fn remaining_seconds(iso: &str) -> Option<i64> {
     let mi = time_parts.get(1).copied().unwrap_or(0);
     let sec = time_parts.get(2).copied().unwrap_or(0);
 
-    // Days since epoch (rough).
-    let leap_years = (1970..y).filter(|&yr| yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0)).count() as u64;
+    let leap_years = (1970..y)
+        .filter(|&yr| yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0))
+        .count() as u64;
     let days_in_year = y.saturating_sub(1970) * 365 + leap_years;
     let month_days: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let days_in_month: u64 = month_days[..((mo as usize).saturating_sub(1)).min(12)].iter().sum();
+    let days_in_month: u64 =
+        month_days[..((mo as usize).saturating_sub(1)).min(12)].iter().sum();
     let total_days = days_in_year + days_in_month + d.saturating_sub(1);
     let target_unix = total_days * 86400 + h * 3600 + mi * 60 + sec;
 
