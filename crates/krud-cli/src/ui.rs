@@ -350,6 +350,151 @@ pub fn print_decision_prompt() {
     std::io::stdout().flush().ok();
 }
 
+// ─── login screen ────────────────────────────────────────────────────────────
+
+/// Full login screen — shows URL prominently so the user can copy it.
+pub fn print_login_screen(url: &str) {
+    let bw = box_width();
+    let iw = inner_width(bw);
+
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline("◆ krud AI  ·  Login".with(PURPLE).bold(), 19, bw);
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+    println!("  {} Open this URL in your browser to sign in:", "◆".with(PURPLE));
+    println!();
+
+    // URL box — wrap if too long
+    let url_lines = wrap(url, iw);
+    println!("  ╭{}╮", "─".repeat(bw));
+    for line in &url_lines {
+        pline(line.as_str().with(PURPLE).bold().underlined(), line.chars().count(), bw);
+    }
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+    println!(
+        "  {} Your browser should open automatically. If not, copy the URL above.",
+        "◆".dark_grey()
+    );
+    println!();
+}
+
+/// Inline waiting indicator — no newline so we can erase it.
+pub fn print_login_waiting() {
+    print!("  {} Waiting for browser approval…", "◆".with(PURPLE));
+    std::io::stdout().flush().ok();
+}
+
+/// Erase the waiting line.
+pub fn clear_login_waiting() {
+    print!("\r\x1B[2K");
+    std::io::stdout().flush().ok();
+}
+
+/// Show after successful login.
+pub fn print_login_success(email: &str) {
+    let bw = box_width();
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline(
+        format!("✓  Logged in as {}", email).with(PURPLE).bold(),
+        14 + email.chars().count(),
+        bw,
+    );
+    pline(
+        "   Run krud chat to start".dark_grey(),
+        25,
+        bw,
+    );
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+}
+
+/// Show when device code expires before the user approves.
+pub fn print_login_expired() {
+    let bw = box_width();
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline("✗  Login code expired".red().bold(), 21, bw);
+    println!("  ├{}┤", "─".repeat(bw));
+    pline("Run krud login again to get a fresh code.".dark_grey(), 41, bw);
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+}
+
+// ─── connection check screens ─────────────────────────────────────────────────
+
+/// Inline "connecting…" — no newline so we can erase it.
+pub fn print_connecting() {
+    print!("  {} Connecting to krud API…", "◆".with(PURPLE));
+    std::io::stdout().flush().ok();
+}
+
+/// Erase the connecting line.
+pub fn clear_connecting() {
+    print!("\r\x1B[2K");
+    std::io::stdout().flush().ok();
+}
+
+/// Shown when API responds OK.
+pub fn print_connected() {
+    println!("  {} Connected  ✓", "◆".with(PURPLE));
+}
+
+/// Shown when the API is unreachable.
+pub fn print_connect_failed(api_url: &str) {
+    let bw = box_width();
+    let iw = inner_width(bw);
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline("✗  Cannot reach krud API".red().bold(), 24, bw);
+    println!("  ├{}┤", "─".repeat(bw));
+    let url_lines = wrap(api_url, iw);
+    for line in &url_lines {
+        pline(line.as_str().dark_grey(), line.chars().count(), bw);
+    }
+    println!("  ├{}┤", "─".repeat(bw));
+    pline("• Check your internet connection".dark_grey(), 32, bw);
+    pline("• The service may be restarting — try again in 30s".dark_grey(), 50, bw);
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+}
+
+// ─── auth screens ─────────────────────────────────────────────────────────────
+
+/// Shown when the user runs krud chat without logging in first.
+pub fn print_not_logged_in() {
+    let bw = box_width();
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline("◆ Not logged in".with(PURPLE).bold(), 15, bw);
+    println!("  ├{}┤", "─".repeat(bw));
+    pline(
+        format!("Run {} to authenticate.", "krud login".with(PURPLE).bold()),
+        28,
+        bw,
+    );
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+}
+
+/// Shown when the stored session token is rejected by the API (expired/revoked).
+pub fn print_session_expired() {
+    let bw = box_width();
+    println!();
+    println!("  ╭{}╮", "─".repeat(bw));
+    pline("◆ Session expired".with(PURPLE).bold(), 17, bw);
+    println!("  ├{}┤", "─".repeat(bw));
+    pline(
+        format!("Run {} to log in again.", "krud login".with(PURPLE).bold()),
+        29,
+        bw,
+    );
+    println!("  ╰{}╯", "─".repeat(bw));
+    println!();
+}
+
 // ─── error / info ────────────────────────────────────────────────────────────
 
 pub fn print_error(msg: &str) {
