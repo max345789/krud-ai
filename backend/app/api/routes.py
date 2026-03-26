@@ -98,8 +98,8 @@ def device_start(request: Request, payload: DeviceStartRequest) -> DeviceStartRe
     return DeviceStartResponse(
         device_code=record["device_code"],
         user_code=record["user_code"],
-        verification_uri=f"{settings.public_base_url}/device",
-        verification_uri_complete=f"{settings.public_base_url}/device?user_code={record['user_code']}",
+        verification_uri=f"{settings.device_base_url}/cli-auth",
+        verification_uri_complete=f"{settings.device_base_url}/cli-auth?user_code={record['user_code']}",
         interval_seconds=settings.device_poll_interval_seconds,
         expires_in_seconds=settings.device_code_ttl_seconds,
     )

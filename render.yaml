@@ -20,6 +20,10 @@ services:
       # ── server ──────────────────────────────────────────────────────────────
       - key: KRUD_PUBLIC_BASE_URL
         value: https://krud-api.onrender.com
+      - key: KRUD_FRONTEND_URL
+        value: https://dabcloud.in
+      - key: KRUD_ALLOWED_ORIGINS
+        value: https://dabcloud.in
       - key: KRUD_DOWNLOAD_BASE_URL
         value: https://github.com/max345789/krud-ai/releases/download
       - key: KRUD_RELEASE_VERSION
@@ -49,11 +53,11 @@ services:
       - key: KRUD_TRIAL_DAYS
         value: "14"
       - key: KRUD_BILLING_SUCCESS_URL
-        value: https://krud-api.onrender.com/billing/success
+        value: https://dabcloud.in/payment-success
       - key: KRUD_BILLING_CANCEL_URL
-        value: https://krud-api.onrender.com/billing/cancel
+        value: https://dabcloud.in/billing
       - key: KRUD_BILLING_PORTAL_RETURN_URL
-        value: https://krud-api.onrender.com/billing
+        value: https://dabcloud.in/billing
 
       # ── LLM ────────────────────────────────────────────────────────────────
       - key: OPENAI_BASE_URL

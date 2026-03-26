@@ -45,6 +45,8 @@ class Settings:
     api_host: str = os.getenv("KRUD_API_HOST", "127.0.0.1")
     api_port: int = int(os.getenv("KRUD_API_PORT", "8000"))
     public_base_url: str = os.getenv("KRUD_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
+    # ── frontend URL (landing page) — used for device auth redirect ──────────
+    frontend_url: str = os.getenv("KRUD_FRONTEND_URL", "")
 
     # ── release distribution ─────────────────────────────────────────────────
     download_base_url: str = os.getenv("KRUD_DOWNLOAD_BASE_URL", "https://downloads.krud.ai")
@@ -84,6 +86,11 @@ class Settings:
     billing_portal_return_url: str = os.getenv(
         "KRUD_BILLING_PORTAL_RETURN_URL", "http://127.0.0.1:8000/billing"
     )
+
+    @property
+    def device_base_url(self) -> str:
+        """URL prefix for device auth pages — frontend if set, else backend."""
+        return self.frontend_url.rstrip("/") if self.frontend_url else self.public_base_url
 
     # ── CORS — comma-separated list of allowed browser origins ───────────────
     # Default: only the public base URL.  Add more via KRUD_ALLOWED_ORIGINS.
