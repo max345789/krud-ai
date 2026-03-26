@@ -87,7 +87,20 @@ async fn main() -> Result<()> {
 }
 
 async fn login() -> Result<()> {
+    // ── connection check ──────────────────────────────────────────────────────
+    ui::print_connecting();
     let client = reqwest::Client::new();
+    let health = client
+        .get(format!("{}/healthz", api_base_url()))
+        .send()
+        .await;
+    ui::clear_connecting();
+    if health.is_err() || !health.unwrap().status().is_success() {
+        ui::print_connect_failed(&api_base_url());
+        return Ok(());
+    }
+
+    // ── start device flow ─────────────────────────────────────────────────────
     let response = client
         .post(format!("{}/v1/device/start", api_base_url()))
         .json(&serde_json::json!({ "client_name": "krud-cli" }))
@@ -97,13 +110,17 @@ async fn login() -> Result<()> {
         .json::<DeviceStartResponse>()
         .await?;
 
-    ui::print_info("Open this page to approve Krud AI:");
-    ui::print_info(&response.verification_uri_complete);
+    ui::print_login_screen(&response.verification_uri_complete);
     let _ = Command::new("open")
         .arg(&response.verification_uri_complete)
         .status();
 
+    // ── poll for approval ─────────────────────────────────────────────────────
     loop {
+        ui::print_login_waiting();
+        sleep(Duration::from_secs(response.interval_seconds)).await;
+        ui::clear_login_waiting();
+
         let poll = client
             .post(format!("{}/v1/device/poll", api_base_url()))
             .json(&serde_json::json!({ "device_code": response.device_code }))
@@ -124,14 +141,14 @@ async fn login() -> Result<()> {
                     .as_ref()
                     .map(|account| account.email.as_str())
                     .unwrap_or("unknown");
-                ui::print_info(&format!("Logged in as {email}"));
+                ui::print_login_success(email);
                 break;
             }
-            "expired" => return Err(anyhow!("The device code expired before approval")),
-            _ => {
-                ui::print_info("Waiting for browser approval…");
-                sleep(Duration::from_secs(response.interval_seconds)).await;
+            "expired" => {
+                ui::print_login_expired();
+                return Ok(());
             }
+            _ => {} // still pending — loop continues
         }
     }
 
@@ -152,7 +169,7 @@ async fn status(paths: &AppPaths) -> Result<()> {
     println!("  ┌{}┐", "─".repeat(bw));
     println!(
         "  │  {}{}│",
-        "Krud AI  ·  status".cyan().bold(),
+        "Krud AI  ·  status".with(crossterm::style::Color::Rgb { r: 168, g: 85, b: 247 }).bold(),
         " ".repeat(bw.saturating_sub(22))
     );
     println!("  └{}┘", "─".repeat(bw));
@@ -207,21 +224,65 @@ async fn status(paths: &AppPaths) -> Result<()> {
 }
 
 async fn chat(paths: &AppPaths, args: ChatArgs) -> Result<()> {
-    let token = read_session_token()?.ok_or_else(|| anyhow!("Run `krud login` first"))?;
+    // ── auth check ────────────────────────────────────────────────────────────
+    let token = match read_session_token()? {
+        Some(t) => t,
+        None => {
+            ui::print_not_logged_in();
+            return Ok(());
+        }
+    };
     let client = authenticated_client(&token)?;
 
-    // Fetch account email for the header (best-effort).
+    // ── connection check ──────────────────────────────────────────────────────
+    ui::print_connecting();
+    let health = client
+        .get(format!("{}/healthz", api_base_url()))
+        .send()
+        .await;
+    ui::clear_connecting();
+    match health {
+        Err(_) => {
+            ui::print_connect_failed(&api_base_url());
+            return Ok(());
+        }
+        Ok(r) if !r.status().is_success() => {
+            ui::print_connect_failed(&api_base_url());
+            return Ok(());
+        }
+        _ => {}
+    }
+
+    // ── fetch account (verify token, get email) ───────────────────────────────
     let email: Option<String> = async {
         let resp = client
             .get(format!("{}/v1/account/me", api_base_url()))
             .send()
             .await
             .ok()?;
+        if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
+            return None; // handled below
+        }
         let body: AccountResponse = resp.json().await.ok()?;
         let e = body.email;
         Some(if e.len() > 28 { format!("{}…", &e[..27]) } else { e })
     }
     .await;
+
+    // If /account/me returned 401, session is expired.
+    // Re-check to distinguish "network fine but token bad" vs "no email field".
+    {
+        let check = client
+            .get(format!("{}/v1/account/me", api_base_url()))
+            .send()
+            .await;
+        if let Ok(r) = check {
+            if r.status() == reqwest::StatusCode::UNAUTHORIZED {
+                ui::print_session_expired();
+                return Ok(());
+            }
+        }
+    }
 
     ui::print_header(email.as_deref());
 
