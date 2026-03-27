@@ -34,6 +34,8 @@ Security hardening applied here
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, Response
 
@@ -55,8 +57,10 @@ from app.models.schemas import (
     BillingWebhookResponse,
     ChatMessageCreate,
     ChatSessionCreate,
+    ChatSessionListResponse,
     ChatSessionReply,
     ChatSessionResponse,
+    ChatSessionSummary,
     CommandProposal,
     DeviceApprovalRequest,
     DevicePollRequest,
@@ -235,6 +239,39 @@ def account_subscription(
         customer_id=current.get("billing_customer_id"),
         subscription_id=current.get("billing_subscription_id"),
     )
+
+
+@router.get("/v1/account/token-usage")
+@limiter.limit("60/minute", key_func=user_or_ip_key)
+def account_token_usage(request: Request, user=Depends(get_current_user)) -> dict:
+    now = datetime.now(timezone.utc)
+    used, resets_at = db.get_token_usage_window(user["id"], _window_start(now))
+    sub = db.get_subscription(user["id"])
+    sub_status = sub.get("subscription_status", user.get("subscription_status", "trialing"))
+    token_limit = settings.token_budget_active if sub_status == "active" else settings.token_budget_trial
+    return {"used": used, "limit": token_limit, "resets_at": resets_at}
+
+
+# ── Chat ─ list sessions ────────────────────────────────────────────────────
+
+@router.get("/v1/chat/sessions", response_model=ChatSessionListResponse)
+@limiter.limit("60/minute", key_func=user_or_ip_key)
+def list_chat_sessions(
+    request: Request,
+    user=Depends(get_current_user),
+) -> ChatSessionListResponse:
+    rows = db.list_chat_sessions(user_id=user["id"])
+    sessions = [
+        ChatSessionSummary(
+            session_id=r["id"],
+            title=r["title"],
+            created_at=r["created_at"],
+            message_count=int(r.get("message_count") or 0),
+            tokens_used=int(r.get("tokens_used") or 0),
+        )
+        for r in rows
+    ]
+    return ChatSessionListResponse(sessions=sessions)
 
 
 # ── Billing ───────────────────────────────────────────────────────────────────

@@ -155,6 +155,18 @@ class ChatSessionResponse(BaseModel):
     created_at: datetime
 
 
+class ChatSessionSummary(BaseModel):
+    session_id: str
+    title: str
+    created_at: datetime
+    message_count: int = 0
+    tokens_used: int = 0
+
+
+class ChatSessionListResponse(BaseModel):
+    sessions: list[ChatSessionSummary]
+
+
 class ChatMessageCreate(BaseModel):
     """
     content is the user's message to the LLM.
