@@ -111,11 +111,13 @@ def device_start(request: Request, payload: DeviceStartRequest) -> DeviceStartRe
 
 
 @router.get("/device", response_class=HTMLResponse)
+@router.get("/cli-auth", response_class=HTMLResponse)
 @limiter.limit("30/minute")
 def device_page(request: Request, user_code: str | None = None) -> HTMLResponse:
     """
     Serve the browser approval page.
 
+    Accessible at both /device and /cli-auth (alias used by the CLI).
     user_code is validated before being forwarded to the HTML builder so that
     malformed values never reach template rendering.
     """
@@ -124,6 +126,7 @@ def device_page(request: Request, user_code: str | None = None) -> HTMLResponse:
 
 
 @router.post("/device", response_class=HTMLResponse)
+@router.post("/cli-auth", response_class=HTMLResponse)
 @limiter.limit("5/minute")
 def device_page_submit(
     request: Request,
