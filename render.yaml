@@ -19,11 +19,11 @@ services:
 
       # ── server ──────────────────────────────────────────────────────────────
       - key: KRUD_PUBLIC_BASE_URL
-        value: https://krud-api.onrender.com
+        value: https://api.dabcloud.in
       - key: KRUD_FRONTEND_URL
-        value: https://install.krud.ai
+        value: https://api.dabcloud.in
       - key: KRUD_ALLOWED_ORIGINS
-        value: https://install.krud.ai
+        value: https://api.dabcloud.in,https://install.krud.ai
       - key: KRUD_DOWNLOAD_BASE_URL
         value: https://github.com/max345789/krud-ai/releases/download
       - key: KRUD_RELEASE_VERSION
