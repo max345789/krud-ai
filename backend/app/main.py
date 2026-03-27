@@ -39,14 +39,21 @@ from slowapi.middleware import SlowAPIMiddleware
 
 logging.basicConfig(level=logging.INFO)
 
-import sentry_sdk
+try:
+    import sentry_sdk
+    _sentry_available = True
+except ImportError:
+    sentry_sdk = None  # type: ignore[assignment]
+    _sentry_available = False
+    logging.getLogger(__name__).warning("sentry_sdk not installed — error tracking disabled")
+
 from app.api.routes import router
 from app.core.config import settings
 from app.core.db import Database
 from app.core.limiter import limiter
 
 # ── Sentry error tracking ─────────────────────────────────────────────────────
-if settings.sentry_dsn:
+if _sentry_available and settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
         traces_sample_rate=0.2,   # 20% of requests traced for performance

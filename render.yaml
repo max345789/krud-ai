@@ -9,7 +9,7 @@ services:
     healthCheckPath: /healthz
     envVars:
       - key: PYTHON_VERSION
-        value: "3.11"
+        value: "3.11.9"
 
       # ── database (Supabase PostgreSQL) ───────────────────────────────────────
       # Set this in the Render dashboard → Environment → Secret Files / Env Vars.
