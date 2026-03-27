@@ -210,6 +210,14 @@ class Database:
         record["usage_events"] = self.count_usage_events(record["id"])
         return record
 
+    def update_user_name(self, user_id: str, name: str) -> None:
+        with self._lock, self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update users set name = %s where id = %s",
+                    (name, user_id),
+                )
+
     def create_chat_session(self, user_id: str, title: str) -> dict[str, str]:
         record = {
             "id": f"session_{secrets.token_hex(8)}",
@@ -224,6 +232,24 @@ class Database:
                     record,
                 )
         return record
+
+    def list_chat_sessions(self, user_id: str, limit: int = 50) -> list[dict[str, object]]:
+        with self.connect() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    """
+                    select id, title, created_at,
+                           (select count(*) from chat_messages where session_id = chat_sessions.id) as message_count,
+                           (select coalesce(sum(prompt_tokens + completion_tokens), 0)
+                            from usage_events where session_id = chat_sessions.id) as tokens_used
+                    from chat_sessions
+                    where user_id = %s
+                    order by created_at desc
+                    limit %s
+                    """,
+                    (user_id, limit),
+                )
+                return [self._row(r) for r in cur.fetchall()]
 
     def get_chat_session(self, session_id: str, user_id: str) -> dict[str, str] | None:
         with self.connect() as conn:

@@ -87,6 +87,9 @@ class Settings:
         "KRUD_BILLING_PORTAL_RETURN_URL", "http://127.0.0.1:8000/billing"
     )
 
+    # ── error tracking ───────────────────────────────────────────────────────
+    sentry_dsn: str | None = os.getenv("SENTRY_DSN")
+
     @property
     def device_base_url(self) -> str:
         """URL prefix for device auth pages — frontend if set, else backend."""
