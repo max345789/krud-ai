@@ -51,6 +51,7 @@ from app.core.security import (
 )
 from app.models.schemas import (
     AccountResponse,
+    AccountUpdateRequest,
     BillingCheckoutResponse,
     BillingOverviewResponse,
     BillingPortalResponse,
@@ -222,6 +223,22 @@ def account_me(request: Request, user=Depends(get_current_user)) -> AccountRespo
         user_id=user["id"],
         email=user["email"],
         name=user["name"],
+        usage_events=user.get("usage_events", 0),
+    )
+
+
+@router.patch("/v1/account/me", response_model=AccountResponse)
+@limiter.limit("10/minute", key_func=user_or_ip_key)
+def account_update(
+    request: Request,
+    body: AccountUpdateRequest,
+    user=Depends(get_current_user),
+) -> AccountResponse:
+    db.update_user_name(user["id"], body.name)
+    return AccountResponse(
+        user_id=user["id"],
+        email=user["email"],
+        name=body.name,
         usage_events=user.get("usage_events", 0),
     )
 

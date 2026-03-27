@@ -210,6 +210,14 @@ class Database:
         record["usage_events"] = self.count_usage_events(record["id"])
         return record
 
+    def update_user_name(self, user_id: str, name: str) -> None:
+        with self._lock, self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "update users set name = %s where id = %s",
+                    (name, user_id),
+                )
+
     def create_chat_session(self, user_id: str, title: str) -> dict[str, str]:
         record = {
             "id": f"session_{secrets.token_hex(8)}",

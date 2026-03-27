@@ -107,6 +107,18 @@ class DevicePollRequest(BaseModel):
 
 # ── Account ───────────────────────────────────────────────────────────────────
 
+class AccountUpdateRequest(BaseModel):
+    model_config = _STRICT
+    name: str = Field(min_length=1, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def _clean_name(cls, v: str) -> str:
+        if "\x00" in v:
+            raise ValueError("Null bytes are not permitted")
+        return v.strip()
+
+
 class AccountResponse(BaseModel):
     user_id: str
     email: EmailStr
