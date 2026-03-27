@@ -85,6 +85,9 @@ class Settings:
         "KRUD_BILLING_PORTAL_RETURN_URL", "http://127.0.0.1:8000/billing"
     )
 
+    # ── error tracking ───────────────────────────────────────────────────────
+    sentry_dsn: str | None = os.getenv("SENTRY_DSN")
+
     # ── CORS — comma-separated list of allowed browser origins ───────────────
     # Default: only the public base URL.  Add more via KRUD_ALLOWED_ORIGINS.
     # Example: KRUD_ALLOWED_ORIGINS=https://app.krud.ai,https://staging.krud.ai
