@@ -9,6 +9,9 @@ services:
     pullRequestPreviewsEnabled: false
     routes:
       - type: rewrite
+        source: /install.sh
+        destination: /install.sh
+      - type: rewrite
         source: /*
         destination: /index.html
 
