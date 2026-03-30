@@ -399,7 +399,11 @@ pre {
 
 .hero-shell {
   position: relative;
-  padding: clamp(5.5rem, 10vw, 8rem) 0 2.2rem;
+  min-height: calc(100svh - 4.8rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(2.75rem, 6vw, 5rem) 0 1.75rem;
 }
 
 .hero-shell::before {
@@ -416,9 +420,19 @@ pre {
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.02fr) minmax(320px, 0.98fr);
-  gap: clamp(2rem, 5vw, 4.5rem);
-  align-items: end;
+  grid-template-columns: minmax(0, 0.94fr) minmax(340px, 0.88fr);
+  gap: clamp(1.5rem, 4vw, 3.25rem);
+  align-items: center;
+}
+
+.hero-copy {
+  max-width: 32rem;
+}
+
+.hero-copy h1 {
+  max-width: 7.8ch;
+  font-size: clamp(3.35rem, 6.1vw, 5.75rem);
+  line-height: 0.92;
 }
 
 .hero-kicker {
@@ -435,16 +449,22 @@ pre {
 }
 
 .hero-lead {
-  max-width: 36rem;
-  margin-top: 1.2rem;
-  font-size: 1.08rem;
+  max-width: 31rem;
+  margin-top: 1rem;
+  font-size: 1rem;
 }
 
 .hero-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 0.9rem;
-  margin-top: 2rem;
+  width: min(100%, 32rem);
+  margin-top: 1.6rem;
+}
+
+.hero-actions .button-row {
+  margin-top: 0;
 }
 
 .hero-notes,
@@ -458,6 +478,7 @@ pre {
 
 .hero-notes {
   margin-top: 1.25rem;
+  max-width: 34rem;
 }
 
 .hero-signal-row {
@@ -506,6 +527,8 @@ pre {
 
 .hero-stage {
   position: relative;
+  width: min(100%, 34rem);
+  margin-left: auto;
 }
 
 .hero-stage__surface,
@@ -518,7 +541,7 @@ pre {
 }
 
 .hero-stage__surface {
-  padding: 1.15rem;
+  padding: 1rem;
 }
 
 .hero-stage__art {
@@ -602,10 +625,10 @@ pre {
 }
 
 .copy-command {
-  width: min(100%, 34rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 1rem;
   padding: 0.95rem 1rem 0.95rem 1.05rem;
   border-radius: 1.35rem;
@@ -626,7 +649,8 @@ pre {
   margin-top: 0.35rem;
   font-size: 0.9rem;
   color: var(--text);
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .copy-command__button {
@@ -1444,6 +1468,11 @@ pre {
 }
 
 @media (max-width: 1024px) {
+  .hero-shell {
+    min-height: auto;
+    padding-top: clamp(3.2rem, 8vw, 4.75rem);
+  }
+
   .page-intro__grid,
   .hero-grid,
   .split-section,
@@ -1476,6 +1505,13 @@ pre {
 
   .site-footer__links {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .hero-copy,
+  .hero-stage {
+    max-width: none;
+    width: 100%;
+    margin-left: 0;
   }
 }
 
@@ -1544,8 +1580,9 @@ pre {
     width: min(100% - 1.25rem, 1180px);
   }
 
-  .copy-command {
-    align-items: start;
+  .hero-copy h1 {
+    max-width: 6.7ch;
+    font-size: clamp(3.05rem, 16vw, 4.8rem);
   }
 
   .copy-command code {
@@ -1571,6 +1608,16 @@ pre {
   .cta-band__actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .hero-actions .button-row {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .hero-actions .button-row .button {
+    width: 100%;
   }
 }
 
