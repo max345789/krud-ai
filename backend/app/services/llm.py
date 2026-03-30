@@ -51,7 +51,17 @@ def generate_reply(message: str, history: list[dict[str, object]], cwd: str | No
         return heuristic_reply(message)
 
 
+_RESPONSES_API_MODELS = {"codex-mini-latest", "o3", "o4-mini"}
+
+
+def _is_responses_api(model: str) -> bool:
+    return model in _RESPONSES_API_MODELS
+
+
 def call_openai_chat(message: str, history: list[dict[str, object]], cwd: str | None = None) -> ChatGeneration:
+    if _is_responses_api(settings.openai_model):
+        return call_openai_responses(message=message, history=history, cwd=cwd)
+
     endpoint = f"{settings.openai_base_url.rstrip('/')}/chat/completions"
     messages: list[dict[str, str]] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
@@ -97,6 +107,51 @@ def call_openai_chat(message: str, history: list[dict[str, object]], cwd: str | 
         model=settings.openai_model,
         prompt_tokens=int(usage.get("prompt_tokens", 0)),
         completion_tokens=int(usage.get("completion_tokens", 0)),
+    )
+
+
+def call_openai_responses(message: str, history: list[dict[str, object]], cwd: str | None = None) -> ChatGeneration:
+    """Call the OpenAI Responses API (used by codex-mini-latest, o3, o4-mini)."""
+    endpoint = f"{settings.openai_base_url.rstrip('/')}/responses"
+
+    system = SYSTEM_PROMPT
+    if cwd:
+        system += f"\n\nCurrent working directory: {cwd}"
+
+    input_messages: list[dict[str, str]] = []
+    for item in history[-8:]:
+        role = str(item["role"])
+        if role in {"user", "assistant"}:
+            input_messages.append({"role": role, "content": str(item["content"])})
+    input_messages.append({"role": "user", "content": message})
+
+    response = httpx.post(
+        endpoint,
+        headers={
+            "Authorization": f"Bearer {settings.openai_api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": settings.openai_model,
+            "instructions": system,
+            "input": input_messages,
+            "text": {"format": {"type": "json_object"}},
+        },
+        timeout=settings.openai_timeout_seconds,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    content = payload["output"][0]["content"][0]["text"]
+    parsed = json.loads(content)
+    usage = payload.get("usage", {})
+
+    return ChatGeneration(
+        text=str(parsed.get("text", "")).strip() or "I have a response ready.",
+        command_proposals=normalize_command_proposals(parsed.get("command_proposals", [])),
+        provider="openai",
+        model=settings.openai_model,
+        prompt_tokens=int(usage.get("input_tokens", 0)),
+        completion_tokens=int(usage.get("output_tokens", 0)),
     )
 
 

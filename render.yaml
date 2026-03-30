@@ -79,7 +79,7 @@ services:
       - key: OPENAI_BASE_URL
         value: https://api.openai.com/v1
       - key: OPENAI_MODEL
-        value: gpt-4o-mini
+        value: codex-mini-latest
       - key: OPENAI_TIMEOUT_SECONDS
         value: "45"
       - key: OPENAI_API_KEY
