@@ -2,15 +2,15 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { ArrowRight, Bot } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import heroArt from '../assets/hero.png';
+import { INSTALL_COMMAND } from '../content/site';
 import { CommandWindow, CopyCommand, Reveal, SectionHeading } from '../components/ui';
-
-const installCommand = 'curl -fsSL https://install.krud.ai | sh';
 
 const heroLines = [
   { kind: 'command', text: 'krud chat' },
   { kind: 'prompt', text: 'audit why the staging daemon stopped processing jobs' },
   { kind: 'agent', text: 'Checking launchd status, local queue, and recent logs...' },
-  { kind: 'output', text: 'launchctl print gui/501/in.krud.ai | rg "state|last exit"' },
+  { kind: 'output', text: 'launchctl print gui/501/in.dabcloud.krudd | rg "state|last exit"' },
   { kind: 'success', text: 'Daemon stalled after a socket timeout. Restart queued safely.' },
 ];
 
@@ -30,23 +30,23 @@ const daemonLines = [
 
 const workflow = [
   {
-    title: 'State the outcome',
-    text: 'Describe the result you need in plain language. Krud translates that request into shell actions with context.',
+    title: 'Say what you need',
+    text: 'Start with the outcome in plain language. Krud handles the shell recall so you can stay with the real problem.',
   },
   {
-    title: 'Review the plan',
-    text: 'Risky operations stop for confirmation. Safe tasks can run now or move into the daemon queue.',
+    title: 'Pause at the edge',
+    text: 'Inspection can stay fast. Risky work stops at a review boundary so the operator keeps final control.',
   },
   {
-    title: 'Read the receipt',
-    text: 'Krud explains what happened, records usage, and keeps enough history to continue the thread later.',
+    title: 'Keep the receipt',
+    text: 'The result comes back as a readable explanation with enough history to continue later without guessing.',
   },
 ];
 
 const productFacts = [
   {
     title: 'Device-code auth',
-    text: 'Sign in from the terminal with browser approval. No pasted tokens or extension handshakes.',
+    text: 'Sign in from the terminal with a browser checkpoint instead of pasted tokens or extension handshakes.',
   },
   {
     title: 'Approval before damage',
@@ -77,6 +77,21 @@ const proofItems = [
   },
 ];
 
+const stageDetails = [
+  {
+    title: 'For on-call fixes',
+    text: 'A calmer first response when the system is loud and the operator should not have to be.',
+  },
+  {
+    title: 'For repeatable runbooks',
+    text: 'Queue long work into the daemon and keep the terminal free for the next call.',
+  },
+  {
+    title: 'For human memory',
+    text: 'Keep enough trail to return tomorrow without rebuilding the whole context from scratch.',
+  },
+];
+
 const tapeItems = [
   'krud chat "trace why nginx is returning 502"',
   'krud run "nightly deploy sanity checks"',
@@ -96,54 +111,82 @@ export default function Home() {
           <Reveal className="hero-copy">
             <p className="hero-kicker">
               <Bot size={14} />
-              Terminal-native operator loop
+              For people who still love the shell
             </p>
-            <h1>The terminal agent that gets real work done.</h1>
+            <h1>The terminal, but with memory, restraint, and a pulse.</h1>
             <p className="hero-lead">
-              Krud takes the full loop, not just autocomplete: plan the command, ask
-              before risky changes, execute in context, read the output, and keep the
-              trail visible.
+              Ask for the outcome in plain language. Krud plans the commands, pauses before
+              damage, and keeps a readable trail when the work actually matters.
             </p>
 
             <div className="hero-actions">
-              <CopyCommand command={installCommand} label="Install Krud" />
+              <CopyCommand command={INSTALL_COMMAND} label="Install Krud" />
               <div className="button-row">
                 <Link to="/docs" className="button button-primary">
                   Read the docs
                   <ArrowRight size={15} />
                 </Link>
-                <Link to="/pricing" className="button button-secondary">
-                  View pricing
+                <Link to="/billing" className="button button-secondary">
+                  Start a plan
                 </Link>
               </div>
             </div>
 
             <div className="hero-notes">
               <span className="status-pill">Mac-first CLI</span>
-              <span className="status-pill">Browser approval only when needed</span>
+              <span className="status-pill">Human approval before risky moves</span>
               <span className="status-pill">Rust CLI + daemon + FastAPI control plane</span>
+            </div>
+
+            <div className="hero-signal-row">
+              {stageDetails.map((item) => (
+                <div key={item.title} className="hero-signal">
+                  <span>{item.title}</span>
+                  <p>{item.text}</p>
+                </div>
+              ))}
             </div>
           </Reveal>
 
           <Reveal className="hero-stage" delay={0.1}>
-            <CommandWindow
-              title="krud operator session"
-              label="live"
-              lines={heroLines}
-              footer="Command proposals, usage budgets, and session history stay visible after the answer."
-            />
-            <MotionDiv
-              className="hero-stage__note"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <strong>Built for operators, not screenshots.</strong>
-              <p>
-                Device auth, daemon queueing, billing hooks, and release manifests are
-                already part of the product surface.
-              </p>
-            </MotionDiv>
+            <div className="hero-stage__surface">
+              <div className="hero-stage__art" aria-hidden="true">
+                <img src={heroArt} alt="" className="hero-stage__glyph" />
+                <span className="hero-stage__caption">
+                  built for the long way home from a broken deploy
+                </span>
+              </div>
+
+              <CommandWindow
+                title="krud operator session"
+                label="live"
+                lines={heroLines}
+                footer="Command proposals, usage budgets, and session history stay visible after the answer."
+              />
+
+              <MotionDiv
+                className="hero-stage__meta"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.5, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              >
+                <p className="story-kicker">Tonight&apos;s rhythm</p>
+                <ul className="hero-stage__list">
+                  <li>
+                    <strong>Ask once.</strong>
+                    <span>Let the product translate intent into shell-safe moves.</span>
+                  </li>
+                  <li>
+                    <strong>Review before damage.</strong>
+                    <span>Approval stays part of the experience, not a patch on top.</span>
+                  </li>
+                  <li>
+                    <strong>Keep the trail.</strong>
+                    <span>Readable receipts matter when the next shift picks the work back up.</span>
+                  </li>
+                </ul>
+              </MotionDiv>
+            </div>
           </Reveal>
         </div>
 
@@ -163,8 +206,8 @@ export default function Home() {
           <Reveal>
             <SectionHeading
               eyebrow="The loop"
-              title="One product idea, end to end."
-              description="Describe the outcome, review the command, then read a clean receipt. Every section of the product supports that same flow."
+              title="Three beats, one rhythm."
+              description="Describe the outcome, review the plan, then read the receipt. Every useful part of the product supports that same cadence."
               align="center"
             />
           </Reveal>
@@ -186,8 +229,8 @@ export default function Home() {
           <Reveal>
             <SectionHeading
               eyebrow="Risk handling"
-              title="Risky work stays reviewable."
-              description="Krud is designed around approvals and readable proposals. That makes the UI sharper, because the product never asks the operator to trust a black box."
+              title="Confidence grows when the product pauses at the right moment."
+              description="Krud is designed around approvals and readable proposals. The point is not to feel magical. The point is to feel dependable."
             />
             <ul className="detail-list">
               <li>Destructive commands can stop for Y/N confirmation before execution.</li>
@@ -201,7 +244,7 @@ export default function Home() {
               title="approval boundary"
               label="review"
               lines={reviewLines}
-              footer="The product respects the moment where a human should stay in control."
+              footer="The sharpest interface choice is often the moment where the human stays in control."
             />
           </Reveal>
         </div>
@@ -212,8 +255,8 @@ export default function Home() {
           <Reveal>
             <SectionHeading
               eyebrow="Background work"
-              title="Foreground focus, background execution."
-              description="The CLI can queue long-running tasks into the daemon so the workflow still feels fast even when the work is not."
+              title="Let the long jobs keep moving after you close the lid."
+              description="The daemon path matters because terminal UX is not only about command generation. It is about staying responsive while the work continues."
             />
             <ul className="detail-list">
               <li>The daemon continues jobs while the terminal is free for the next decision.</li>
@@ -238,8 +281,8 @@ export default function Home() {
           <Reveal>
             <SectionHeading
               eyebrow="Product depth"
-              title="The details already exist."
-              description="The backend and CLI already support the product claims, so the UX can be crisp without pretending to do more than it does."
+              title="Proof, not posture."
+              description="The backend and CLI already support the claims on this page, which means the interface can stay calm and specific instead of decorative."
             />
           </Reveal>
 
@@ -260,8 +303,8 @@ export default function Home() {
           <Reveal>
             <SectionHeading
               eyebrow="What is real"
-              title="This is not a landing page for a concept."
-              description="The site now speaks in product truths instead of filler proof. These are already represented in the codebase."
+              title="This site now reflects the product that actually exists."
+              description="The strongest public surface is the one that respects the truth of the repo: CLI, daemon, device auth, billing, and release metadata all belong to the same story."
               align="center"
             />
           </Reveal>
@@ -282,7 +325,7 @@ export default function Home() {
           <Reveal className="cta-band">
             <SectionHeading
               eyebrow="Start here"
-              title="Install it, log in from the terminal, and test the loop yourself."
+              title="Install it, point it at something messy, and see if it earns a place in your shell."
               description="The fastest path is still the clearest one: install, run krud login, approve the device, and ask for something that would normally cost you ten minutes of shell recall."
             />
             <div className="cta-band__actions">
@@ -290,7 +333,7 @@ export default function Home() {
                 Open installation guide
               </Link>
               <Link to="/features" className="button button-secondary">
-                See the full capability map
+                See the capability map
               </Link>
             </div>
           </Reveal>

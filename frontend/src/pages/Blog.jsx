@@ -1,50 +1,23 @@
 import React from 'react';
 import { ArrowRight } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { BLOG_POSTS } from '../content/site';
 import { PageIntro, Reveal } from '../components/ui';
 
-const posts = [
-  {
-    cat: 'Release',
-    title: 'Krud AI v2.0 brings command history, device auth polish, and clearer billing paths',
-    excerpt: 'The site and product now tell the same story: install fast, approve safely, read the receipt, and keep long-running work in the daemon queue.',
-    date: 'March 2026',
-    read: '4 min read',
-  },
-  {
-    cat: 'Engineering',
-    title: 'Why the control plane matters for a terminal product',
-    excerpt: 'Device login, billing, release metadata, and token budgets are not side features. They are the infrastructure that makes the CLI feel trustworthy.',
-    date: 'March 2026',
-    read: '6 min read',
-  },
-  {
-    cat: 'Tutorial',
-    title: 'Use Krud to diagnose an nginx 502 without leaving the shell',
-    excerpt: 'A walkthrough of prompt, proposal, approval, log inspection, and readable remediation in one operator loop.',
-    date: 'February 2026',
-    read: '5 min read',
-  },
-  {
-    cat: 'Engineering',
-    title: 'Why we kept browser approval but removed fake web login',
-    excerpt: 'The sharper UX choice was to make the device-code flow explicit instead of dressing up a surface the product did not need.',
-    date: 'February 2026',
-    read: '4 min read',
-  },
-];
-
 export default function Blog() {
+  const [featuredPost, ...supportingPosts] = BLOG_POSTS;
+
   return (
     <>
       <PageIntro
         eyebrow="Journal"
-        title="Editorial by default, not a pile of feature cards."
-        description="The journal now reads like a place for shipping notes, engineering rationale, and operator walkthroughs. That suits the product better than another marketing grid."
+        title="Notes from the command line, not filler around it."
+        description="The journal is where releases, engineering decisions, and operator walkthroughs get enough space to breathe. Every article now has a real route behind it."
         aside={
           <div className="meta-panel">
             <p>
-              Good product writing should help someone understand why the system is built the
-              way it is and what changed.
+              Good product writing should help someone understand what shipped, why it
+              matters, and what kind of work the product is really built for.
             </p>
           </div>
         }
@@ -53,33 +26,43 @@ export default function Blog() {
       <section className="section-block">
         <div className="shell">
           <Reveal className="editorial-feature">
-            <p className="story-kicker">{posts[0].cat}</p>
-            <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3.4rem)' }}>{posts[0].title}</h2>
-            <p style={{ marginTop: '1rem', maxWidth: '42rem' }}>{posts[0].excerpt}</p>
+            <p className="story-kicker">{featuredPost.category}</p>
+            <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3.4rem)' }}>{featuredPost.title}</h2>
+            <p style={{ marginTop: '1rem', maxWidth: '42rem' }}>{featuredPost.excerpt}</p>
             <ul className="story-meta">
-              <li>{posts[0].date}</li>
-              <li>{posts[0].read}</li>
+              <li>{featuredPost.date}</li>
+              <li>{featuredPost.readTime}</li>
             </ul>
+            <div className="button-row">
+              <Link to={`/blog/${featuredPost.slug}`} className="button button-primary">
+                Read the full note
+                <ArrowRight size={15} />
+              </Link>
+            </div>
           </Reveal>
         </div>
       </section>
 
       <section className="section-block">
         <div className="shell">
-          {posts.slice(1).map((post, index) => (
+          {supportingPosts.map((post, index) => (
             <Reveal key={post.title} delay={index * 0.08} className="editorial-post">
-              <p className="story-kicker">{post.cat}</p>
+              <p className="story-kicker">{post.category}</p>
               <div>
                 <h3>{post.title}</h3>
                 <p style={{ marginTop: '0.6rem', maxWidth: '42rem' }}>{post.excerpt}</p>
               </div>
               <div>
                 <p className="story-meta">{post.date}</p>
-                <p className="story-meta">{post.read}</p>
-                <span className="button button-link" style={{ marginTop: '0.8rem' }}>
+                <p className="story-meta">{post.readTime}</p>
+                <Link
+                  to={`/blog/${post.slug}`}
+                  className="button button-link editorial-link"
+                  style={{ marginTop: '0.8rem' }}
+                >
                   Read note
                   <ArrowRight size={15} />
-                </span>
+                </Link>
               </div>
             </Reveal>
           ))}

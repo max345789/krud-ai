@@ -13,8 +13,10 @@ Security notes
 Environment variables
 ─────────────────────
   OPENAI_API_KEY           – required for LLM calls; if absent, heuristic fallback runs
-  STRIPE_SECRET_KEY        – required for real billing; if absent, mock billing is used
-  STRIPE_WEBHOOK_SECRET    – required to verify Stripe webhook signatures
+  DODO_PAYMENTS_API_KEY    – required for real billing; if absent, mock billing is used
+  DODO_PAYMENTS_WEBHOOK_KEY – required to verify Dodo webhook signatures
+  DATABASE_URL             – PostgreSQL connection string for production
+  KRUD_DATABASE_PATH       – local sqlite path for development and tests
   KRUD_ALLOWED_ORIGINS     – comma-separated extra CORS origins (default: public_base_url)
 """
 from __future__ import annotations
@@ -45,17 +47,29 @@ class Settings:
     api_host: str = os.getenv("KRUD_API_HOST", "127.0.0.1")
     api_port: int = int(os.getenv("KRUD_API_PORT", "8000"))
     public_base_url: str = os.getenv("KRUD_PUBLIC_BASE_URL", "http://127.0.0.1:8000")
-    # ── frontend URL (landing page) — used for device auth redirect ──────────
+    # ── browser-facing hosts ────────────────────────────────────────────────
+    # device_base_url is the explicit host used in the CLI login link. It can
+    # be a dedicated auth subdomain or a frontend domain, as long as /cli-auth
+    # and /device resolve to this backend.
+    device_base_url_override: str = os.getenv("KRUD_DEVICE_BASE_URL", "")
+    # Backward-compatible fallback for older deployments that used the more
+    # generic frontend URL name for the device approval page.
     frontend_url: str = os.getenv("KRUD_FRONTEND_URL", "")
 
     # ── release distribution ─────────────────────────────────────────────────
-    download_base_url: str = os.getenv("KRUD_DOWNLOAD_BASE_URL", "https://downloads.krud.ai")
+    download_base_url: str = os.getenv(
+        "KRUD_DOWNLOAD_BASE_URL",
+        "https://github.com/max345789/krud-ai/releases/download",
+    )
     release_version: str = os.getenv("KRUD_RELEASE_VERSION", "0.1.0")
 
     # ── database ─────────────────────────────────────────────────────────────
-    # PostgreSQL connection string (Supabase).  Required in production.
+    # PostgreSQL connection string (Supabase). Preferred in production.
     # Example: postgresql://postgres:[password]@db.[ref].supabase.co:5432/postgres
     database_url: str = os.getenv("DATABASE_URL", "")
+    # Local sqlite path used by tests and local development when DATABASE_URL is
+    # not configured.
+    database_path: str = os.getenv("KRUD_DATABASE_PATH", "")
 
     # ── LLM — key is read from env only, never hard-coded ────────────────────
     openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
@@ -92,12 +106,23 @@ class Settings:
 
     @property
     def device_base_url(self) -> str:
-        """URL prefix for device auth pages — frontend if set, else backend."""
-        return self.frontend_url.rstrip("/") if self.frontend_url else self.public_base_url
+        """
+        URL prefix for device auth pages.
+
+        Precedence:
+        1. KRUD_DEVICE_BASE_URL
+        2. KRUD_FRONTEND_URL (legacy compatibility)
+        3. KRUD_PUBLIC_BASE_URL
+        """
+        if self.device_base_url_override:
+            return self.device_base_url_override.rstrip("/")
+        if self.frontend_url:
+            return self.frontend_url.rstrip("/")
+        return self.public_base_url.rstrip("/")
 
     # ── CORS — comma-separated list of allowed browser origins ───────────────
     # Default: only the public base URL.  Add more via KRUD_ALLOWED_ORIGINS.
-    # Example: KRUD_ALLOWED_ORIGINS=https://app.krud.ai,https://staging.krud.ai
+    # Example: KRUD_ALLOWED_ORIGINS=https://dabcloud.in,https://www.dabcloud.in
     allowed_origins_extra: str = os.getenv("KRUD_ALLOWED_ORIGINS", "")
 
     # ── subscription / auth ───────────────────────────────────────────────────

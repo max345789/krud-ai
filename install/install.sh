@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-API_BASE_URL="${KRUD_API_BASE_URL:-https://api.krud.ai}"
+API_BASE_URL="${KRUD_API_BASE_URL:-https://api.dabcloud.in}"
 CHANNEL="${KRUD_CHANNEL:-stable}"
 INSTALL_ROOT="${KRUD_INSTALL_ROOT:-$HOME/.krud}"
 BIN_DIR="$INSTALL_ROOT/bin"
@@ -64,4 +64,3 @@ Next steps:
   2. Run: krud login
   3. Optional daemon setup: krud daemon install && krud daemon start
 EOF
-

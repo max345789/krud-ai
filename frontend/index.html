@@ -2,54 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Krud AI - The Terminal Agent that gets it done.</title>
-    <meta name="description" content="Type what you want. Krud gets it done in your terminal. A high-converting, modern, and minimal AI tool for developers." />
+    <title>Krud AI | Terminal memory for real operator work</title>
+    <meta
+      name="description"
+      content="Krud is a terminal-native AI assistant with device approval, readable receipts, daemon queueing, and a calmer path through real shell work."
+    />
     <meta name="theme-color" content="#0a0a0a" />
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
-    <style>
-      body {
-        -webkit-user-select: none;
-        -moz-user-select: none;
-        -ms-user-select: none;
-        user-select: none;
-      }
-      input, textarea {
-        -webkit-user-select: text;
-        -moz-user-select: text;
-        -ms-user-select: text;
-        user-select: text;
-      }
-    </style>
-    <script>
-      // Disable right click / context menu
-      document.addEventListener('contextmenu', event => event.preventDefault());
-
-      // Disable developer tools keybindings
-      document.onkeydown = function (e) {
-        if (e.keyCode === 123) return false; // F12
-        if (e.ctrlKey && e.shiftKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) return false; // Ctrl+Shift+I/J/C
-        if (e.ctrlKey && e.keyCode === 85) return false; // Ctrl+U
-        if (e.metaKey && e.altKey && (e.keyCode === 73 || e.keyCode === 74 || e.keyCode === 67)) return false; // Cmd+Option+I/J/C
-        if (e.metaKey && e.keyCode === 85) return false; // Cmd+U
-      };
-
-      // Disable copying and cutting
-      document.addEventListener('copy', event => {
-        // Allow copy if inside an input or textarea
-        if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
-          event.preventDefault();
-        }
-      });
-      document.addEventListener('cut', event => {
-        if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
-          event.preventDefault();
-        }
-      });
-    </script>
   </head>
   <body>
     <div id="root"></div>

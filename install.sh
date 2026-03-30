@@ -1,8 +1,8 @@
 #!/usr/bin/env sh
-# krud installer — https://install.krud.ai | sh
+# krud installer — https://dabcloud.in/install.sh | sh
 set -e
 
-KRUD_API="${KRUD_API:-https://krud-api.onrender.com}"
+KRUD_API="${KRUD_API:-https://api.dabcloud.in}"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
 # ── detect platform ────────────────────────────────────────────────────────────

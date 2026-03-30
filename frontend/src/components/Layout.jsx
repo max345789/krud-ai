@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowUpRight, GitBranch, Menu, X } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import BrandMark from './BrandMark';
+import { REPO_URL } from '../content/site';
 
 const navItems = [
   { to: '/', label: 'Home' },
@@ -19,6 +20,7 @@ const footerGroups = [
       { to: '/', label: 'Overview' },
       { to: '/features', label: 'Capabilities' },
       { to: '/pricing', label: 'Pricing' },
+      { to: '/billing', label: 'Billing' },
       { to: '/login', label: 'Access' },
     ],
   },
@@ -27,11 +29,11 @@ const footerGroups = [
     links: [
       { to: '/docs', label: 'Documentation' },
       { to: '/blog', label: 'Release journal' },
-      { href: 'https://github.com/max345789/krud-ai', label: 'GitHub', external: true },
+      { href: REPO_URL, label: 'GitHub', external: true },
     ],
   },
   {
-    title: 'Company',
+    title: 'Support',
     links: [
       { to: '/contact', label: 'Contact' },
       { to: '/terms', label: 'Terms' },
@@ -89,15 +91,15 @@ export default function Layout() {
           <div className="site-header__actions">
             <a
               className="button button-secondary header-link-desktop"
-              href="https://github.com/max345789/krud-ai"
+              href={REPO_URL}
               target="_blank"
               rel="noreferrer"
             >
               GitHub
               <ArrowUpRight size={14} />
             </a>
-            <NavLink to="/docs" className="button button-primary header-primary">
-              Get started
+            <NavLink to="/billing" className="button button-primary header-primary">
+              Start plan
             </NavLink>
             <button
               type="button"
@@ -134,15 +136,15 @@ export default function Layout() {
               </div>
               <div className="mobile-menu__actions">
                 <NavLink
-                  to="/docs"
+                  to="/billing"
                   className="button button-primary"
                   onClick={() => setMenuOpen(false)}
                 >
-                  Open docs
+                  Start plan
                 </NavLink>
                 <a
                   className="button button-secondary"
-                  href="https://github.com/max345789/krud-ai"
+                  href={REPO_URL}
                   target="_blank"
                   rel="noreferrer"
                 >
@@ -163,12 +165,12 @@ export default function Layout() {
           <div className="site-footer__lead">
             <BrandMark />
             <p>
-              Terminal-native AI for people who want receipts, approvals, and a command
-              trail instead of a glossy demo.
+              A calmer command line for people who ship, debug, and recover in the shell
+              more than they present slides about it.
             </p>
             <div className="site-footer__status">
               <span className="status-dot" />
-              <span>Mac-first CLI. Device auth. Background daemon.</span>
+              <span>Mac-first CLI. Device auth. Billing returns. Background daemon.</span>
             </div>
           </div>
 
@@ -184,7 +186,7 @@ export default function Layout() {
             <div>
               <p className="footer-heading">Open source</p>
               <a
-                href="https://github.com/max345789/krud-ai"
+                href={REPO_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="footer-link footer-link-inline"

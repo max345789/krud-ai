@@ -1,5 +1,11 @@
 import React from 'react';
 import { ArrowUpRight, LifeBuoy, Mail } from 'lucide-react';
+import {
+  REPO_URL,
+  SUPPORT_EMAIL,
+  SUPPORT_MAILTO,
+  TEAM_ROLLOUT_MAILTO,
+} from '../content/site';
 import { PageIntro, Reveal, SectionHeading } from '../components/ui';
 
 export default function Contact() {
@@ -7,14 +13,13 @@ export default function Contact() {
     <>
       <PageIntro
         eyebrow="Contact"
-        title="Clear channels, no fake form submission."
-        description="The previous page looked polished but did not actually connect to anything. This version makes every route actionable and keeps the expectations explicit."
+        title="Talk to the people shipping the shell."
+        description="Every path on this page does something real: email, rollout conversation, or direct code-level context. No dead-end form, no hollow CTA."
         aside={
           <div className="meta-panel">
             <p>
-              The cleanest UX here is honest routing: email when you need help, GitHub when
-              you want code-level context, and a direct rollout conversation when you are
-              evaluating the product seriously.
+              If you need help, the fastest support loop is still specific context:
+              what you ran, what you expected, and what actually happened.
             </p>
           </div>
         }
@@ -26,9 +31,9 @@ export default function Contact() {
             <strong>General product help</strong>
             <p>Questions about installation, login, pricing, or rollout.</p>
             <div className="button-row">
-              <a href="mailto:support@krud.ai" className="button button-primary">
+              <a href={SUPPORT_MAILTO} className="button button-primary">
                 <Mail size={15} />
-                support@krud.ai
+                {SUPPORT_EMAIL}
               </a>
             </div>
           </Reveal>
@@ -37,10 +42,7 @@ export default function Contact() {
             <strong>Team rollout</strong>
             <p>Use the same support path with context about team size and operating model.</p>
             <div className="button-row">
-              <a
-                href="mailto:support@krud.ai?subject=Krud%20team%20rollout"
-                className="button button-secondary"
-              >
+              <a href={TEAM_ROLLOUT_MAILTO} className="button button-secondary">
                 <LifeBuoy size={15} />
                 Discuss rollout
               </a>
@@ -52,7 +54,7 @@ export default function Contact() {
             <p>Use the open-source repo when you want to inspect the current product surface.</p>
             <div className="button-row">
               <a
-                href="https://github.com/max345789/krud-ai"
+                href={REPO_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="button button-secondary"
@@ -80,8 +82,8 @@ export default function Contact() {
           <Reveal>
             <SectionHeading
               eyebrow="Why this matters"
-              title="Contact UX should reduce support loops."
-              description="A dead form looks finished but wastes time. Clear channels make the next move obvious for both the user and the team receiving the message."
+              title="Support should feel like a handoff, not a maze."
+              description="When the route is explicit, people ask better questions and the team answering them starts closer to the real issue."
             />
           </Reveal>
 

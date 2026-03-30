@@ -49,17 +49,14 @@ export default function Features() {
     <>
       <PageIntro
         eyebrow="Capabilities"
-        title="A sharper product surface for the entire operator loop."
-        description="The feature story now reads like the actual product: command planning, approval, execution, receipts, and account control. No more generic SaaS boxes."
+        title="Everything the product does to keep operators calm under pressure."
+        description="Krud is not trying to replace the shell. It is trying to make the shell feel steadier: clearer plans, safer approvals, stronger memory, and a control plane that backs the story up."
         aside={
           <div className="meta-panel">
             <p>
-              Krud already spans a Rust CLI, a background daemon, and a FastAPI control
-              plane. The interface should feel that deliberate.
-            </p>
-            <p>
-              These capabilities are grounded in the backend and CLI already sitting in the
-              repo, not imagined just for the site.
+              The product already spans a Rust CLI, a background daemon, and a FastAPI
+              control plane. The public site should feel like those pieces belong to the
+              same instrument.
             </p>
           </div>
         }
@@ -148,16 +145,16 @@ export default function Features() {
           <Reveal className="cta-band">
             <SectionHeading
               eyebrow="Next step"
-              title="See the docs, then try the auth and command loop yourself."
-              description="The best feature proof here is still firsthand use."
+              title="Read the flow, then give it a real problem."
+              description="The best feature proof is still firsthand use: install, log in, and ask for something that normally costs you ten minutes of shell recall."
             />
             <div className="cta-band__actions">
               <Link to="/docs" className="button button-primary">
                 Installation and docs
                 <ArrowRight size={15} />
               </Link>
-              <Link to="/pricing" className="button button-secondary">
-                Plans and rollout
+              <Link to="/billing" className="button button-secondary">
+                Billing and plans
               </Link>
             </div>
           </Reveal>

@@ -7,7 +7,7 @@ use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-pub const SERVICE_NAME: &str = "in.krud.ai";
+pub const SERVICE_NAME: &str = "in.dabcloud.krudd";
 pub const KEYCHAIN_SERVICE: &str = "Krud AI";
 pub const KEYCHAIN_ACCOUNT: &str = "cli-session";
 

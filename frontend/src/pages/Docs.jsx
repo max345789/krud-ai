@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowUpRight } from 'lucide-react';
+import { API_BASE_URL, DEVICE_BASE_URL, INSTALL_COMMAND, REPO_URL } from '../content/site';
 import { CommandWindow, CopyCommand, PageIntro, Reveal } from '../components/ui';
 
 const sections = [
@@ -16,14 +17,10 @@ export default function Docs() {
     <>
       <PageIntro
         eyebrow="Documentation"
-        title="A docs surface that feels like product, not a dumping ground."
-        description="The new docs page is structured around the actual operator journey: install, authenticate, work in chat, queue background jobs, then tune the control plane."
+        title="From first install to the first real save."
+        description="These docs are arranged around the operator journey that actually exists today: install, authenticate, work in chat, queue long jobs, then tune the control plane."
         aside={
           <div className="meta-panel">
-            <p>
-              Every section here is grounded in commands or backend behavior already present
-              in the repo.
-            </p>
             <p>
               If somebody skims only the headings and command snippets, they should still
               understand the product immediately.
@@ -46,7 +43,7 @@ export default function Docs() {
                 Need the backend shape too? The control plane lives in the same product story.
               </p>
               <a
-                href="https://github.com/max345789/krud-ai"
+                href={REPO_URL}
                 target="_blank"
                 rel="noreferrer"
                 className="button button-link"
@@ -65,7 +62,7 @@ export default function Docs() {
                 The first step should take seconds. Install the CLI, confirm the binary, and
                 move directly into authentication.
               </p>
-              <CopyCommand command="curl -fsSL https://install.krud.ai | sh" label="Installer" />
+              <CopyCommand command={INSTALL_COMMAND} label="Installer" />
               <ul className="docs-steps">
                 <li>Installs the <span className="inline-code">krud</span> binary locally.</li>
                 <li>Works for the primary macOS and Linux paths used by the product.</li>
@@ -156,10 +153,14 @@ export default function Docs() {
                 device auth, account data, billing flows, chat sessions, and release manifests.
               </p>
               <div className="config-block">
-                <div>KRUD_PUBLIC_BASE_URL = <strong>"https://api.dabcloud.in"</strong></div>
-                <div>KRUD_DEVICE_BASE_URL = <strong>"https://dabcloud.in"</strong></div>
+                <div>
+                  KRUD_PUBLIC_BASE_URL = <strong>"{API_BASE_URL}"</strong>
+                </div>
+                <div>
+                  KRUD_DEVICE_BASE_URL = <strong>"{DEVICE_BASE_URL}"</strong>
+                </div>
                 <div>OPENAI_API_KEY = <strong>"set on backend"</strong></div>
-                <div>KRUD_BILLING_MODE = <strong>"mock" | "stripe"</strong></div>
+                <div>KRUD_BILLING_MODE = <strong>"mock" | "dodo"</strong></div>
               </div>
               <ul className="docs-steps">
                 <li>Use the same host routing for <span className="inline-code">/cli-auth</span> and device approval pages.</li>

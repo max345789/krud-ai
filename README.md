@@ -100,15 +100,35 @@ Backend example: [backend/.env.example](/Users/sarath/Projects/krud-ai/backend/.
 
 Important variables:
 
+- `DATABASE_URL`
+- `KRUD_DATABASE_PATH`
 - `KRUD_API_BASE_URL`
 - `KRUD_PUBLIC_BASE_URL`
+- `KRUD_DEVICE_BASE_URL`
 - `KRUD_DOWNLOAD_BASE_URL`
 - `KRUD_RELEASE_VERSION`
 - `KRUD_BILLING_MODE`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL`
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
+- `DODO_PAYMENTS_API_KEY`
+- `DODO_PAYMENTS_WEBHOOK_KEY`
+- `DODO_PAYMENTS_PRODUCT_ID`
+
+If your API and browser login page use different hosts, set:
+
+```bash
+KRUD_PUBLIC_BASE_URL=https://api.dabcloud.in
+KRUD_DEVICE_BASE_URL=https://dabcloud.in
+```
+
+or use a dedicated auth subdomain:
+
+```bash
+KRUD_PUBLIC_BASE_URL=https://api.dabcloud.in
+KRUD_DEVICE_BASE_URL=https://auth.dabcloud.in
+```
+
+The device host must route `/cli-auth` and `/device` to the FastAPI backend.
 
 ## What Works
 
@@ -147,7 +167,7 @@ cargo check
 These are not code gaps anymore; they require outside accounts or deployment:
 
 - set `OPENAI_API_KEY` for live model-backed planning
-- set Stripe secrets and `KRUD_BILLING_MODE=stripe` for live paid billing
+- set Dodo Payments secrets and `KRUD_BILLING_MODE=dodo` for live paid billing
 - host the release assets behind a real public URL
 - deploy the backend somewhere stable instead of localhost
 

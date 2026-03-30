@@ -491,7 +491,7 @@ fn manage_daemon(paths: &AppPaths, action: DaemonAction) -> Result<()> {
     match action {
         DaemonAction::Install => {
             install_daemon_binary(paths)?;
-            let template = include_str!("../../../launchd/in.krud.ai.plist");
+            let template = include_str!("../../../launchd/in.dabcloud.krudd.plist");
             let daemon_binary = paths.daemon_binary.display().to_string();
             let log_dir = paths.log_dir.display().to_string();
             let rendered = template

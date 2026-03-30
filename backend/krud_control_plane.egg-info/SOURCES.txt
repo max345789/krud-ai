@@ -7,6 +7,9 @@ app/core/__init__.py
 app/core/auth.py
 app/core/config.py
 app/core/db.py
+app/core/limiter.py
+app/core/security.py
+app/core/token_budget.py
 app/models/__init__.py
 app/models/schemas.py
 app/services/__init__.py
@@ -14,6 +17,7 @@ app/services/billing.py
 app/services/chat.py
 app/services/device_auth.py
 app/services/llm.py
+app/services/pages.py
 krud_control_plane.egg-info/PKG-INFO
 krud_control_plane.egg-info/SOURCES.txt
 krud_control_plane.egg-info/dependency_links.txt

@@ -8,13 +8,13 @@ export default function Login() {
     <>
       <PageIntro
         eyebrow="Access"
-        title="Keep sign-in honest: the terminal is the primary door."
-        description="The old page implied a full web-login flow that does not actually exist here. This version makes the product path explicit instead of pushing users into dead-end forms."
+        title="The terminal is the front door."
+        description="Krud feels best when access starts where the work starts: in the shell. The browser only steps in to confirm the device and then gets out of the way."
         aside={
           <div className="meta-panel">
             <p>
-              If you want access today, use the device-code flow from the CLI. That is the
-              strongest and clearest product path in the repo.
+              Run <span className="inline-code">krud login</span>, approve the session,
+              and come straight back to the terminal. That is the whole rhythm.
             </p>
           </div>
         }
@@ -65,13 +65,13 @@ export default function Login() {
           <Reveal>
             <SectionHeading
               eyebrow="Why this is better"
-              title="Good UX removes fake decisions."
-              description="A web sign-in form that does nothing is worse than no form. This page now clarifies the path instead of pretending there are multiple entry points."
+              title="Less pretending creates more trust."
+              description="A terminal-native product should not ask people to guess whether the real workflow lives in the browser or the shell. This page makes the boundary clear."
             />
             <ul className="detail-list">
-              <li>Trust goes up because every visible action is real.</li>
-              <li>Support load goes down because the next step is unambiguous.</li>
-              <li>The site stays aligned with the actual backend and CLI architecture.</li>
+              <li>Every visible action maps to a real capability in the repo.</li>
+              <li>The browser helps confirm identity without becoming a second product.</li>
+              <li>The site stays aligned with the backend and CLI architecture that already exists.</li>
             </ul>
           </Reveal>
 

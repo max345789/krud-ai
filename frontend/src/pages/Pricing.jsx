@@ -24,7 +24,7 @@ const plans = [
     highlight: true,
     badge: 'Best fit',
     cta: 'Start trial',
-    ctaTo: '/docs',
+    ctaTo: '/billing',
     description: 'For people using Krud as part of their daily terminal routine.',
     features: [
       'Full command history',
@@ -77,17 +77,16 @@ export default function Pricing() {
     <>
       <PageIntro
         eyebrow="Pricing"
-        title="A cleaner pricing story for a serious terminal product."
-        description="The page now reads like a rollout decision, not a generic startup grid. Plans are framed around operator maturity and support, not empty marketing promises."
+        title="Pricing for people who actually live in a shell."
+        description="Plans are framed around operating rhythm, not startup theater. Pick the one that matches how deeply Krud is going to sit in your day."
         aside={
           <div className="meta-panel">
             <p>
-              Device auth, subscription enforcement, token budgets, and billing routes
+              Device auth, subscription enforcement, token budgets, and billing returns
               already exist on the backend side.
             </p>
             <p>
-              The UI now reflects that maturity without pretending to be more concrete than
-              the current product setup.
+              The public site now gives those flows an actual place to land.
             </p>
           </div>
         }
@@ -151,8 +150,8 @@ export default function Pricing() {
           <Reveal>
             <SectionHeading
               eyebrow="How to decide"
-              title="Roll out by trust level, not seat count."
-              description="The sharpest pricing UX here is telling people how to choose, not flooding them with invented enterprise bullets."
+              title="Roll out by operating rhythm, not vanity seat math."
+              description="The point is to match the plan to the level of trust and repetition in the work, not to drown someone in enterprise filler."
             />
             <ul className="comparison-list">
               <li>
@@ -189,8 +188,8 @@ export default function Pricing() {
           <Reveal>
             <SectionHeading
               eyebrow="FAQ"
-              title="Questions that actually help someone buy."
-              description="These are the decision blockers worth answering on the page."
+              title="Questions that help someone decide in one sitting."
+              description="These are the blockers worth answering before someone commits the product to their workflow."
             />
           </Reveal>
           <div className="faq-list">

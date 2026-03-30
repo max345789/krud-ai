@@ -236,7 +236,7 @@ def build_device_page(
 
 <!-- NAV -->
 <nav>
-  <a class="nav-brand" href="https://install.krud.ai">
+  <a class="nav-brand" href="https://dabcloud.in">
     <img src="{_LOGO}" alt="Krud AI logo">
     <span>Krud AI</span>
   </a>
