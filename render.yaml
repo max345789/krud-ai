@@ -1,5 +1,18 @@
 services:
   - type: web
+    name: krud-web
+    env: static
+    plan: free
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    pullRequestPreviewsEnabled: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+
+  - type: web
     name: krud-api
     env: python
     plan: free
