@@ -331,24 +331,19 @@ def billing_portal(
 @router.post("/v1/billing/webhook", response_model=BillingWebhookResponse)
 async def billing_webhook(request: Request) -> BillingWebhookResponse:
     """
-    Dodo Payments webhook receiver.
+    Razorpay webhook receiver.
 
-    No rate limit — Dodo must always be able to reach this endpoint without
+    No rate limit — Razorpay must always be able to reach this endpoint without
     being throttled.
 
-    Dodo uses three headers for HMAC-SHA256 signature verification:
-      webhook-id        — unique event ID (used for idempotency)
-      webhook-signature — HMAC-SHA256 signature of "{id}.{timestamp}.{body}"
-      webhook-timestamp — Unix timestamp (seconds) of when the event was sent
+    Razorpay uses one header for HMAC-SHA256 signature verification:
+      X-Razorpay-Signature — HMAC-SHA256(webhook_secret, raw_body)
 
-    In mock mode these headers are ignored and the raw JSON body is trusted.
+    In mock mode this header is ignored and the raw JSON body is trusted.
     """
     payload = await request.body()
-    # Pass all three Dodo signing headers so billing.py can verify the signature.
     webhook_headers = {
-        "webhook-id": request.headers.get("webhook-id", ""),
-        "webhook-signature": request.headers.get("webhook-signature", ""),
-        "webhook-timestamp": request.headers.get("webhook-timestamp", ""),
+        "x-razorpay-signature": request.headers.get("x-razorpay-signature", ""),
     }
     try:
         result = billing.handle_webhook(payload=payload, webhook_headers=webhook_headers)
@@ -376,7 +371,7 @@ def billing_mock_checkout(
     """
     safe_email = require_valid_email(email)
     return HTMLResponse(
-        render_billing_checkout_page(email=safe_email, plan=plan or settings.dodo_product_id)
+        render_billing_checkout_page(email=safe_email, plan=plan or settings.razorpay_plan_id)
     )
 
 

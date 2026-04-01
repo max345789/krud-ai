@@ -45,26 +45,25 @@ services:
       - key: KRUD_RELEASE_VERSION
         value: "0.2.0"
 
-      # ── billing (Dodo Payments) ──────────────────────────────────────────────
-      # Set KRUD_BILLING_MODE=dodo once your Dodo API keys are configured below.
+      # ── billing (Razorpay) ──────────────────────────────────────────────────
+      # Set KRUD_BILLING_MODE=razorpay once your Razorpay keys are configured.
       # Leave as "mock" during initial setup to avoid accidental charges.
       - key: KRUD_BILLING_MODE
         value: mock
 
-      # DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_KEY — set as secrets in the
-      # Render dashboard (Environment → Secret Files / Env Vars).  Never commit.
-      - key: DODO_PAYMENTS_API_KEY
+      # RAZORPAY_KEY_ID      — from Razorpay dashboard: Settings → API Keys
+      # RAZORPAY_KEY_SECRET  — keep as a secret, never commit
+      # RAZORPAY_WEBHOOK_SECRET — from Razorpay dashboard: Settings → Webhooks
+      - key: RAZORPAY_KEY_ID
         sync: false
-      - key: DODO_PAYMENTS_WEBHOOK_KEY
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
 
-      # Product ID from your Dodo Payments dashboard (Products → copy ID).
-      - key: DODO_PAYMENTS_PRODUCT_ID
-        value: prod_placeholder
-
-      # "test_mode" uses the Dodo sandbox; switch to "live_mode" for production.
-      - key: DODO_PAYMENTS_ENVIRONMENT
-        value: test_mode
+      # Subscription Plan ID from Razorpay dashboard: Products → Plans → copy ID
+      - key: RAZORPAY_PLAN_ID
+        value: plan_placeholder
 
       - key: KRUD_TRIAL_DAYS
         value: "14"

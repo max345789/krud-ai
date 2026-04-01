@@ -679,6 +679,17 @@ class Database:
                 dict_row=True,
             )
 
+    def get_user_by_subscription_id(self, subscription_id: str) -> dict[str, str] | None:
+        with self.connect() as conn:
+            return self._fetchone(
+                conn,
+                "select * from users where billing_subscription_id = %s",
+                (subscription_id,),
+                sqlite_query="select * from users where billing_subscription_id = ?",
+                sqlite_params=(subscription_id,),
+                dict_row=True,
+            )
+
     def set_billing_customer(self, user_id: str, customer_id: str) -> None:
         with self._lock, self.connect() as conn:
             self._execute(

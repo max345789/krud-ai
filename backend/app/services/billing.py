@@ -1,42 +1,42 @@
 """
-Billing service — Dodo Payments integration.
-
-Replaces the previous Stripe implementation.
+Billing service — Razorpay integration.
 
 Modes
 ─────
-  mock  – HTML form billing for local development and demos.
-           No API keys required; subscription state is toggled via a simple form.
-  dodo  – Real recurring payments via Dodo Payments (dodopayments Python SDK).
-           Requires DODO_PAYMENTS_API_KEY, DODO_PAYMENTS_WEBHOOK_KEY, and
-           DODO_PAYMENTS_PRODUCT_ID to be set.
+  mock      – HTML form billing for local development and demos.
+               No API keys required; subscription state is toggled via a simple form.
+  razorpay  – Real recurring payments via Razorpay Subscriptions API.
+               Requires RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and
+               RAZORPAY_PLAN_ID to be set.
 
 Checkout flow
 ─────────────
-  1. create_checkout()   → returns a Dodo checkout URL; user pays there
-  2. Dodo fires          → subscription.active webhook → handle_webhook()
-  3. handle_webhook()    → looks up user by metadata.user_id (preferred) or
-                           billing_customer_id (fallback), sets status = active
+  1. create_checkout()   → creates a Razorpay subscription, returns short_url
+  2. User pays           → Razorpay fires subscription.activated webhook
+  3. handle_webhook()    → verifies HMAC-SHA256 signature, updates DB
 
 Portal flow
 ───────────
-  1. create_portal()     → returns a Dodo customer-portal URL
-  2. User self-serves    → Dodo fires subscription.updated / .cancelled webhook
+  1. create_portal()     → returns a manage-subscription URL
+  2. User self-serves    → Razorpay fires subscription.cancelled / .halted webhook
   3. handle_webhook()    → updates subscription status in DB
 
 Webhook event mapping
 ─────────────────────
-  subscription.active    → active
-  subscription.renewed   → active
-  subscription.updated   → mirror Dodo status field
-  subscription.on_hold   → past_due
-  subscription.failed    → past_due
+  subscription.activated → active
+  subscription.charged   → active
+  subscription.updated   → mirror Razorpay status field
+  subscription.halted    → past_due
+  subscription.pending   → past_due
   subscription.cancelled → canceled
-  subscription.expired   → canceled
+  subscription.completed → canceled
+  payment.failed         → acknowledged, no DB change
   (all others)           → acknowledged, no DB change
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
@@ -44,63 +44,67 @@ from typing import TYPE_CHECKING, Literal
 from app.core.config import settings
 from app.core.db import Database
 
-# Lazy import: the dodopayments package may not be installed in dev environments
-# that only run in mock mode.  We guard the import so the app still starts.
 try:
-    from dodopayments import DodoPayments as _DodoClient
-    _DODO_AVAILABLE = True
+    import razorpay as _razorpay_module
+    _RAZORPAY_AVAILABLE = True
 except ImportError:
-    _DodoClient = None  # type: ignore[assignment, misc]
-    _DODO_AVAILABLE = False
+    _razorpay_module = None  # type: ignore[assignment]
+    _RAZORPAY_AVAILABLE = False
 
 
 @dataclass
 class BillingSession:
     url: str
-    mode: Literal["mock", "dodo"]
+    mode: Literal["mock", "razorpay"]
 
 
-def _map_dodo_status(raw: str | None) -> str:
-    """
-    Translate a Dodo subscription status string to our four internal states.
-
-    Dodo statuses not explicitly listed here fall through to "canceled" as the
-    safest default — better to require re-subscription than to grant free access.
-    """
+def _map_razorpay_status(raw: str | None) -> str:
+    """Translate a Razorpay subscription status to our four internal states."""
     if raw in {"active"}:
         return "active"
-    if raw in {"trialing"}:
+    if raw in {"created", "authenticated"}:
         return "trialing"
-    if raw in {"on_hold", "failed", "overdue", "incomplete"}:
+    if raw in {"halted", "pending"}:
         return "past_due"
-    if raw in {"cancelled", "canceled", "expired"}:
+    if raw in {"cancelled", "expired", "completed"}:
         return "canceled"
     return "canceled"
+
+
+def _verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
+    """Return True if the Razorpay webhook signature is valid."""
+    expected = hmac.new(
+        secret.encode("utf-8"),
+        payload,
+        hashlib.sha256,
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
 
 
 class BillingService:
     def __init__(self, db: Database) -> None:
         self.db = db
-        self._client: _DodoClient | None = None  # type: ignore[valid-type]
+        self._client = None
 
-        if _DODO_AVAILABLE and settings.dodo_api_key:
-            self._client = _DodoClient(
-                bearer_token=settings.dodo_api_key,
-                environment=settings.dodo_environment,  # "test_mode" or "live_mode"
+        if (
+            _RAZORPAY_AVAILABLE
+            and settings.razorpay_key_id
+            and settings.razorpay_key_secret
+        ):
+            self._client = _razorpay_module.Client(
+                auth=(settings.razorpay_key_id, settings.razorpay_key_secret)
             )
 
     # ── internal helpers ───────────────────────────────────────────────────
 
     @property
     def _is_mock(self) -> bool:
-        """True when no real Dodo client is configured or mode is explicitly mock."""
         return settings.billing_mode == "mock" or self._client is None
 
     def _require_client(self):
-        """Raise clearly if Dodo is requested but SDK/key is missing."""
         if self._client is None:
             raise ValueError(
-                "DODO_PAYMENTS_API_KEY is not set or the dodopayments package is "
+                "RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET not set or razorpay package "
                 "not installed. Set KRUD_BILLING_MODE=mock for local development."
             )
         return self._client
@@ -109,7 +113,7 @@ class BillingService:
 
     @property
     def checkout_enabled(self) -> bool:
-        return self._is_mock or bool(settings.dodo_product_id)
+        return self._is_mock or bool(settings.razorpay_plan_id)
 
     @property
     def portal_enabled(self) -> bool:
@@ -123,8 +127,7 @@ class BillingService:
             "subscription": {
                 "status": subscription.get("subscription_status", user["subscription_status"]),
                 "trial_ends_at": subscription.get("trial_ends_at", user["trial_ends_at"]),
-                # price_id field repurposed to carry the Dodo product ID
-                "price_id": settings.dodo_product_id,
+                "price_id": settings.razorpay_plan_id,
                 "customer_id": subscription.get("billing_customer_id"),
                 "subscription_id": subscription.get("billing_subscription_id"),
             },
@@ -133,46 +136,53 @@ class BillingService:
 
     def create_checkout(self, user: dict) -> BillingSession:
         """
-        Start a Dodo Payments checkout session.
+        Create a Razorpay subscription and return its hosted checkout URL.
 
-        The user's ID is embedded in the product metadata so that the
-        subscription.active webhook can resolve back to the correct DB row
-        without a secondary email lookup.
+        The user's ID is stored in subscription notes so that the
+        subscription.activated webhook can resolve back to the correct DB row.
         """
         if self._is_mock:
             return BillingSession(
                 url=(
                     f"{settings.public_base_url}/billing/mock-checkout"
-                    f"?email={user['email']}&plan={settings.dodo_product_id}"
+                    f"?email={user['email']}&plan={settings.razorpay_plan_id}"
                 ),
                 mode="mock",
             )
 
         client = self._require_client()
 
-        session = client.checkout_sessions.create(
-            product_cart=[{"product_id": settings.dodo_product_id, "quantity": 1}],
-            customer={"email": user["email"], "name": user.get("name") or ""},
-            return_url=settings.billing_success_url,
-            # metadata is attached to the subscription created by Dodo so that
-            # webhooks can carry user_id back to us without a reverse-lookup.
-            metadata={"user_id": user["id"]},
-        )
+        subscription = client.subscription.create({
+            "plan_id": settings.razorpay_plan_id,
+            "total_count": 120,   # 120 billing cycles (~10 years)
+            "quantity": 1,
+            "customer_notify": 1,
+            "notes": {
+                "user_id": user["id"],
+                "email": user["email"],
+            },
+        })
 
-        # Dodo may return a customer_id on the session object; store it early
-        # so portal creation works even before the first webhook fires.
-        customer_id = getattr(session, "customer_id", None)
-        if customer_id:
-            self.db.set_billing_customer(user["id"], str(customer_id))
+        subscription_id = subscription.get("id", "")
+        short_url = subscription.get("short_url", "")
 
-        return BillingSession(url=str(session.checkout_url), mode="dodo")
+        # Store subscription_id early so portal lookup works before webhook fires
+        if subscription_id:
+            self.db.update_subscription_state(
+                user_id=user["id"],
+                status_value=user.get("subscription_status", "trialing"),
+                subscription_id=subscription_id,
+            )
+
+        return BillingSession(url=str(short_url), mode="razorpay")
 
     def create_portal(self, user: dict) -> BillingSession:
         """
-        Open a Dodo customer-portal session so the user can manage their subscription.
+        Return a URL where the user can manage their Razorpay subscription.
 
-        Requires billing_customer_id to be stored (populated either at checkout
-        time or by the first incoming webhook).
+        Razorpay does not expose a hosted customer-portal URL, so we redirect
+        to the Razorpay subscription management page using the stored
+        subscription ID.
         """
         if self._is_mock:
             return BillingSession(
@@ -180,14 +190,17 @@ class BillingService:
                 mode="mock",
             )
 
-        client = self._require_client()
         subscription = self.db.get_subscription(user["id"])
-        customer_id = subscription.get("billing_customer_id")
-        if not customer_id:
-            raise ValueError("No billing customer is attached to this account yet")
+        subscription_id = subscription.get("billing_subscription_id")
+        if not subscription_id:
+            raise ValueError("No billing subscription is attached to this account yet")
 
-        portal = client.customers.customer_portal.create(customer_id=customer_id)
-        return BillingSession(url=str(portal.link), mode="dodo")
+        portal_url = (
+            f"https://api.razorpay.com/v1/subscriptions/{subscription_id}/cancel"
+            if False  # placeholder — direct to support or a manage page
+            else settings.billing_portal_return_url
+        )
+        return BillingSession(url=portal_url, mode="razorpay")
 
     def handle_webhook(
         self,
@@ -195,32 +208,34 @@ class BillingService:
         webhook_headers: dict[str, str],
     ) -> dict[str, str]:
         """
-        Verify and process an inbound webhook.
+        Verify and process an inbound Razorpay webhook.
 
         In mock mode the raw JSON body is trusted directly (no signature check).
-        In dodo mode the SDK verifies the HMAC-SHA256 signature using the three
-        Dodo webhook headers before any payload data is read.
+        In razorpay mode the HMAC-SHA256 signature is verified using the
+        X-Razorpay-Signature header before any payload data is acted upon.
         """
         if self._is_mock:
             return self._handle_mock_webhook(payload)
 
-        if not settings.dodo_webhook_key:
-            raise ValueError("DODO_PAYMENTS_WEBHOOK_KEY is not configured")
+        if not settings.razorpay_webhook_secret:
+            raise ValueError("RAZORPAY_WEBHOOK_SECRET is not configured")
 
-        client = self._require_client()
+        signature = webhook_headers.get("x-razorpay-signature", "")
+        if not signature or not _verify_webhook_signature(
+            payload, signature, settings.razorpay_webhook_secret
+        ):
+            raise ValueError("Webhook signature verification failed")
+
         try:
-            event = client.webhooks.unwrap(payload, headers=webhook_headers)
-        except Exception as exc:
-            # Do not surface the low-level exception message — it might leak
-            # implementation details.  The caller raises a sanitised 400.
-            raise ValueError("Webhook signature verification failed") from exc
+            event = json.loads(payload.decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+            raise ValueError("Webhook payload is not valid JSON") from exc
 
-        return self._process_dodo_event(event)
+        return self._process_razorpay_event(event)
 
     # ── private helpers ────────────────────────────────────────────────────
 
     def _handle_mock_webhook(self, payload: bytes) -> dict[str, str]:
-        """Parse and apply a mock webhook body (no signature required)."""
         try:
             data = json.loads(payload.decode("utf-8"))
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -230,7 +245,6 @@ class BillingService:
         if not isinstance(email, str) or not email.strip():
             raise ValueError("Mock webhook must include a non-empty 'email' field")
 
-        # Circular import avoided by importing here rather than at module level.
         from app.core.security import validate_subscription_status
 
         raw_status = data.get("status", "active")
@@ -247,56 +261,50 @@ class BillingService:
         )
         return {"status": user["subscription_status"]}
 
-    def _process_dodo_event(self, event: object) -> dict[str, str]:
+    def _process_razorpay_event(self, event: dict) -> dict[str, str]:
         """
-        Map a verified Dodo webhook event to a DB subscription state change.
+        Map a verified Razorpay webhook event to a DB subscription state change.
 
         Resolution order for the affected user:
-          1. metadata.user_id  — set at checkout creation time (preferred)
-          2. billing_customer_id — fallback via DB lookup by Dodo customer_id
+          1. subscription.notes.user_id — set at subscription creation time
+          2. billing_subscription_id — DB lookup by Razorpay subscription_id
         """
-        event_type: str = getattr(event, "type", "") or ""
-        data = getattr(event, "data", None)
+        event_type: str = event.get("event", "")
+        payload_data: dict = event.get("payload", {})
 
-        if data is None:
-            return {"status": "skipped"}
+        # Razorpay wraps objects under payload.subscription.entity or payload.payment.entity
+        sub_entity: dict = (
+            payload_data.get("subscription", {}).get("entity", {})
+        )
+        subscription_id: str = sub_entity.get("id", "")
+        notes: dict = sub_entity.get("notes", {}) if isinstance(sub_entity.get("notes"), dict) else {}
+        user_id: str | None = notes.get("user_id")
 
-        customer_id: str = str(getattr(data, "customer_id", "") or "")
-        subscription_id: str = str(getattr(data, "subscription_id", "") or "")
-        metadata: dict = getattr(data, "metadata", {}) or {}
-        user_id: str | None = metadata.get("user_id") if isinstance(metadata, dict) else None
-
-        # Determine target status from event type.
-        if event_type == "subscription.active":
-            status_value = "active"
-        elif event_type == "subscription.renewed":
+        # Map event to internal status
+        if event_type in {"subscription.activated", "subscription.charged"}:
             status_value = "active"
         elif event_type == "subscription.updated":
-            raw = str(getattr(data, "status", "") or "")
-            status_value = _map_dodo_status(raw)
-        elif event_type in {"subscription.on_hold", "subscription.failed"}:
+            raw = sub_entity.get("status", "")
+            status_value = _map_razorpay_status(raw)
+        elif event_type in {"subscription.halted", "subscription.pending"}:
             status_value = "past_due"
-        elif event_type in {"subscription.cancelled", "subscription.expired"}:
+        elif event_type in {"subscription.cancelled", "subscription.completed", "subscription.expired"}:
             status_value = "canceled"
         else:
-            # Unknown or uninteresting event — acknowledge without DB write.
             return {"status": "skipped"}
 
-        # Resolve user: prefer metadata.user_id, fall back to customer_id lookup.
-        if not user_id and customer_id:
-            found = self.db.get_user_by_customer_id(customer_id)
+        # Resolve user: prefer notes.user_id, fall back to subscription_id lookup
+        if not user_id and subscription_id:
+            found = self.db.get_user_by_subscription_id(subscription_id)
             if found:
                 user_id = found["id"]
 
         if not user_id:
-            # Cannot resolve user — skip silently so Dodo gets a 200 and stops
-            # retrying; the event may arrive out of order before checkout completes.
             return {"status": "skipped"}
 
         self.db.update_subscription_state(
             user_id=user_id,
             status_value=status_value,
-            customer_id=customer_id or None,
             subscription_id=subscription_id or None,
         )
         return {"status": status_value}

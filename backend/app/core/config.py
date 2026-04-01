@@ -13,8 +13,10 @@ Security notes
 Environment variables
 ─────────────────────
   OPENAI_API_KEY           – required for LLM calls; if absent, heuristic fallback runs
-  DODO_PAYMENTS_API_KEY    – required for real billing; if absent, mock billing is used
-  DODO_PAYMENTS_WEBHOOK_KEY – required to verify Dodo webhook signatures
+  RAZORPAY_KEY_ID          – required for real billing; if absent, mock billing is used
+  RAZORPAY_KEY_SECRET      – Razorpay key secret (keep in Render secret env vars)
+  RAZORPAY_WEBHOOK_SECRET  – required to verify Razorpay webhook signatures
+  RAZORPAY_PLAN_ID         – subscription plan ID from Razorpay dashboard
   DATABASE_URL             – PostgreSQL connection string for production
   KRUD_DATABASE_PATH       – local sqlite path for development and tests
   KRUD_ALLOWED_ORIGINS     – comma-separated extra CORS origins (default: public_base_url)
@@ -78,18 +80,18 @@ class Settings:
     openai_timeout_seconds: int = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "45"))
 
     # ── billing — keys are read from env only, never hard-coded ─────────────
-    # billing_mode: "mock" (local dev, no real payments) or "dodo" (production)
+    # billing_mode: "mock" (local dev, no real payments) or "razorpay" (production)
     billing_mode: str = os.getenv("KRUD_BILLING_MODE", "mock")
 
-    # Dodo Payments — set as secrets in Render / environment; never hard-coded.
-    # DODO_PAYMENTS_API_KEY  : live or test API key from the Dodo dashboard
-    # DODO_PAYMENTS_WEBHOOK_KEY : webhook signing secret for signature verification
-    # DODO_PAYMENTS_PRODUCT_ID  : the product/plan ID to attach to new subscriptions
-    # DODO_PAYMENTS_ENVIRONMENT : "test_mode" (sandbox) or "live_mode" (production)
-    dodo_api_key: str | None = os.getenv("DODO_PAYMENTS_API_KEY")
-    dodo_webhook_key: str | None = os.getenv("DODO_PAYMENTS_WEBHOOK_KEY")
-    dodo_product_id: str = os.getenv("DODO_PAYMENTS_PRODUCT_ID", "")
-    dodo_environment: str = os.getenv("DODO_PAYMENTS_ENVIRONMENT", "test_mode")
+    # Razorpay — set as secrets in Render / environment; never hard-coded.
+    # RAZORPAY_KEY_ID      : Key ID from Razorpay dashboard (Settings → API Keys)
+    # RAZORPAY_KEY_SECRET  : Key Secret (keep in Render secret env var)
+    # RAZORPAY_WEBHOOK_SECRET : Webhook secret for HMAC-SHA256 signature verification
+    # RAZORPAY_PLAN_ID     : Subscription plan ID from Razorpay dashboard
+    razorpay_key_id: str | None = os.getenv("RAZORPAY_KEY_ID")
+    razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET")
+    razorpay_webhook_secret: str | None = os.getenv("RAZORPAY_WEBHOOK_SECRET")
+    razorpay_plan_id: str = os.getenv("RAZORPAY_PLAN_ID", "")
 
     billing_success_url: str = os.getenv(
         "KRUD_BILLING_SUCCESS_URL", "http://127.0.0.1:8000/billing/success"
@@ -170,11 +172,10 @@ class Settings:
             f"api_host={self.api_host!r}, "
             f"public_base_url={self.public_base_url!r}, "
             f"billing_mode={self.billing_mode!r}, "
-            f"dodo_environment={self.dodo_environment!r}, "
             f"openai_model={self.openai_model!r}, "
             f"openai_api_key={_mask(self.openai_api_key)}, "
-            f"dodo_api_key={_mask(self.dodo_api_key)}, "
-            f"dodo_webhook_key={_mask(self.dodo_webhook_key)}"
+            f"razorpay_key_id={_mask(self.razorpay_key_id)}, "
+            f"razorpay_key_secret={_mask(self.razorpay_key_secret)}"
             f")"
         )
 
