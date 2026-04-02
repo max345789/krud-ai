@@ -1,7 +1,9 @@
 mod rabbit;
 mod ui;
 
+use crossterm::event::{self as ct_event, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::style::Stylize;
+use crossterm::terminal;
 use std::env;
 use std::fs;
 use std::io::{self, Read, Write};
@@ -15,8 +17,8 @@ use clap::{Args, Parser, Subcommand};
 use krud_core::{
     api_base_url, append_local_message, copy_file_if_exists, delete_session_token, init_local_db,
     read_session_token, recent_tasks, store_session_token, task_counts, upsert_local_session,
-    AccountResponse, AppPaths, ChatReply, DevicePollResponse, DeviceStartResponse, IpcRequest,
-    IpcResponse, SERVICE_NAME,
+    AccountResponse, AppPaths, AuthTokenResponse, ChatReply, DevicePollResponse,
+    DeviceStartResponse, IpcRequest, IpcResponse, SERVICE_NAME,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use tokio::time::sleep;
@@ -73,6 +75,19 @@ async fn main() -> Result<()> {
         .command
         .unwrap_or(Commands::Chat(ChatArgs { prompt: None }));
 
+    // Commands that require an active session.
+    let needs_auth = matches!(
+        command,
+        Commands::Chat(_) | Commands::Status | Commands::Run(_)
+    );
+    if needs_auth && read_session_token()?.is_none() {
+        login().await?;
+        // If user cancelled login, abort.
+        if read_session_token()?.is_none() {
+            return Ok(());
+        }
+    }
+
     match command {
         Commands::Chat(args) => chat(&paths, args).await?,
         Commands::Login => login().await?,
@@ -100,6 +115,129 @@ async fn login() -> Result<()> {
         return Ok(());
     }
 
+    // ── auth method menu ──────────────────────────────────────────────────────
+    let bw = ui::box_width();
+    println!();
+    println!("  ┌{}┐", "─".repeat(bw));
+    println!(
+        "  │  {}{}│",
+        "Krud AI  ·  sign in"
+            .with(crossterm::style::Color::Rgb { r: 168, g: 85, b: 247 })
+            .bold(),
+        " ".repeat(bw.saturating_sub(23))
+    );
+    println!("  └{}┘", "─".repeat(bw));
+    println!();
+    println!("  [1]  Log in with email + password");
+    println!("  [2]  Sign up with email + password");
+    println!("  [3]  Log in with browser (device code)");
+    println!();
+    print!("  Choice [1/2/3]: ");
+    io::stdout().flush()?;
+
+    let mut choice = String::new();
+    io::stdin().read_line(&mut choice)?;
+    let choice = choice.trim();
+
+    match choice {
+        "1" => login_with_password(&client, false).await?,
+        "2" => login_with_password(&client, true).await?,
+        _ => login_with_browser(&client).await?,
+    }
+
+    Ok(())
+}
+
+/// Read a line from stdin, optionally hiding characters (for passwords).
+fn read_line_maybe_hidden(hidden: bool) -> Result<String> {
+    if !hidden {
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf)?;
+        return Ok(buf.trim_end_matches('\n').trim_end_matches('\r').to_string());
+    }
+
+    // Hidden mode: use crossterm raw mode to swallow echoing.
+    let mut password = String::new();
+    terminal::enable_raw_mode()?;
+    loop {
+        match ct_event::read()? {
+            Event::Key(KeyEvent { code: KeyCode::Enter, .. }) => {
+                break;
+            }
+            Event::Key(KeyEvent { code: KeyCode::Char('c'), modifiers: KeyModifiers::CONTROL, .. }) => {
+                terminal::disable_raw_mode()?;
+                println!();
+                return Err(anyhow!("Cancelled"));
+            }
+            Event::Key(KeyEvent { code: KeyCode::Backspace, .. }) => {
+                password.pop();
+            }
+            Event::Key(KeyEvent { code: KeyCode::Char(c), .. }) => {
+                password.push(c);
+            }
+            _ => {}
+        }
+    }
+    terminal::disable_raw_mode()?;
+    println!(); // newline after hidden input
+    Ok(password)
+}
+
+async fn login_with_password(client: &reqwest::Client, is_signup: bool) -> Result<()> {
+    println!();
+    print!("  Email: ");
+    io::stdout().flush()?;
+    let email = read_line_maybe_hidden(false)?;
+    let email = email.trim().to_string();
+
+    print!("  Password: ");
+    io::stdout().flush()?;
+    let password = read_line_maybe_hidden(true)?;
+
+    let name: Option<String> = if is_signup {
+        print!("  Display name (optional): ");
+        io::stdout().flush()?;
+        let n = read_line_maybe_hidden(false)?;
+        let n = n.trim().to_string();
+        if n.is_empty() { None } else { Some(n) }
+    } else {
+        None
+    };
+
+    let endpoint = if is_signup { "signup" } else { "login" };
+    let mut body = serde_json::json!({ "email": email, "password": password });
+    if let Some(n) = name {
+        body["name"] = serde_json::Value::String(n);
+    }
+
+    let resp = client
+        .post(format!("{}/v1/auth/{endpoint}", api_base_url()))
+        .json(&body)
+        .send()
+        .await?;
+
+    if !resp.status().is_success() {
+        let status_code = resp.status();
+        let msg = resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "unknown error".to_string());
+        // Try to extract the "detail" field from the JSON body.
+        let detail = serde_json::from_str::<serde_json::Value>(&msg)
+            .ok()
+            .and_then(|v| v["detail"].as_str().map(|s| s.to_string()))
+            .unwrap_or(msg);
+        ui::print_error(&format!("Auth failed ({status_code}): {detail}"));
+        return Ok(());
+    }
+
+    let auth: AuthTokenResponse = resp.json().await?;
+    store_session_token(&auth.token)?;
+    ui::print_login_success(&auth.email);
+    Ok(())
+}
+
+async fn login_with_browser(client: &reqwest::Client) -> Result<()> {
     // ── start device flow ─────────────────────────────────────────────────────
     let response = client
         .post(format!("{}/v1/device/start", api_base_url()))

@@ -52,6 +52,9 @@ from app.core.security import (
 from app.models.schemas import (
     AccountResponse,
     AccountUpdateRequest,
+    AuthLoginRequest,
+    AuthSignupRequest,
+    AuthTokenResponse,
     BillingCheckoutResponse,
     BillingOverviewResponse,
     BillingPortalResponse,
@@ -86,6 +89,62 @@ from app.services.pages import (
 router = APIRouter()
 db = Database()
 billing = BillingService(db)
+
+
+# ── Email / password auth ─────────────────────────────────────────────────────
+
+@router.post("/v1/auth/signup", response_model=AuthTokenResponse)
+@limiter.limit("5/minute")
+def auth_signup(request: Request, payload: AuthSignupRequest) -> AuthTokenResponse:
+    """
+    Create a new account with email + password.
+
+    Rate limit: 5/minute per IP to prevent account enumeration / spam.
+    Password is hashed with bcrypt before storage — plaintext never persists.
+    """
+    import bcrypt  # noqa: PLC0415  (local import keeps startup fast)
+
+    password_hash = bcrypt.hashpw(payload.password.encode(), bcrypt.gensalt()).decode()
+    try:
+        result = db.signup_with_password(str(payload.email), password_hash, payload.name)
+    except ValueError:
+        # Email already registered — don't leak which emails exist.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with that email already exists",
+        )
+    return AuthTokenResponse(**result)
+
+
+@router.post("/v1/auth/login", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
+def auth_login(request: Request, payload: AuthLoginRequest) -> AuthTokenResponse:
+    """
+    Authenticate with email + password, return a session token.
+
+    Rate limit: 10/minute per IP.  Generic error messages prevent user
+    enumeration (OWASP A07: Identification and Authentication Failures).
+    """
+    import bcrypt  # noqa: PLC0415
+
+    user = db.get_user_for_password_auth(str(payload.email))
+    if not user or not user.get("password_hash"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    if not bcrypt.checkpw(payload.password.encode(), user["password_hash"].encode()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    token = db.create_session_for_user(user["id"])
+    return AuthTokenResponse(
+        token=token,
+        email=user["email"],
+        name=user.get("name"),
+        subscription_status=user["subscription_status"],
+    )
 
 
 # ── Device auth ───────────────────────────────────────────────────────────────
