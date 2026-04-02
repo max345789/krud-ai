@@ -1,246 +1,246 @@
-//! Terminal chat UI for krud — clean scrolling chat with a single mascot.
+//! Terminal UI for krud.
 //!
-//! Layout overview:
-//!
-//!  ╭──────────────────────────────────────────────────────────────────╮
-//!  │  ◆ krud AI                            AI terminal agent · user@ │  ← header (printed once)
-//!  ╰──────────────────────────────────────────────────────────────────╯
-//!
-//!  [chat messages scroll here naturally as the terminal scrolls up]
-//!
-//!                                ╭──────────────────────────────────╮
-//!                                │  your message                    │  ← user bubble (right)
-//!                                ╰─────────────────── You ──────────╯
-//!
-//!  ◆ Thinking…                                                          ← thinking line (erased)
-//!    OR
-//!  ◆ krud AI  ·  gpt-4o-mini  ·  8↑ 42↓                               ← assistant header
-//!  ─────────────────────────────────────────────────────────────────────
-//!  I'll help you find large files...
-//!
-//!  ╭─ Command 1/1 ──────────────────────────── ⚠ medium ─╮
-//!  │  $ find . -type f -size +10M                         │
-//!  ├──────────────────────────────────────────────────────┤
-//!  │  [r] Run now   [q] Queue   [s] Skip                  │
-//!  ╰──────────────────────────────────────────────────────╯
-//!
-//!  [single static robot, drawn once above each input box]
-//!
-//!  ╭─ ~/Projects/krud ──────────────────────────────────────
-//!  │  › _
+//! Visual direction:
+//! - compact "control deck" layout instead of stacked generic boxes
+//! - purple accent for brand and user actions
+//! - steel-blue metadata and system chrome
+//! - denser prompt dock so the interface feels like a terminal product,
+//!   not a chat transcript with borders
 
-use crossterm::style::{Color, Stylize};
-use crossterm::terminal;
-use std::io::Write;
+use crossterm::cursor::{Hide, MoveTo, Show};
+use crossterm::style::{
+    Attribute, Color, Print, ResetColor, SetAttribute, SetBackgroundColor, SetForegroundColor,
+    StyledContent, Stylize,
+};
+use crossterm::terminal::{
+    self, disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
+use crossterm::{execute, queue};
+use std::io::{self, Write};
 
-// ── purple palette (matches rabbit.rs) ──────────────────────────────────────
-
-const PURPLE: Color = Color::Rgb { r: 168, g: 85, b: 247 };
-const PURPLE_DIM: Color = Color::Rgb { r: 120, g: 60, b: 180 };
-
-// ─── sizing ─────────────────────────────────────────────────────────────────
+const COPPER: Color = Color::Rgb {
+    r: 109,
+    g: 40,
+    b: 217,
+};
+const COPPER_SOFT: Color = Color::Rgb {
+    r: 147,
+    g: 51,
+    b: 234,
+};
+const TEAL: Color = Color::Rgb {
+    r: 126,
+    g: 34,
+    b: 206,
+};
+const TEAL_SOFT: Color = Color::Rgb {
+    r: 167,
+    g: 139,
+    b: 250,
+};
+const CLOUD: Color = Color::Rgb {
+    r: 91,
+    g: 33,
+    b: 182,
+};
+const SMOKE: Color = Color::Rgb {
+    r: 126,
+    g: 34,
+    b: 206,
+};
+const SUCCESS: Color = Color::Rgb {
+    r: 124,
+    g: 58,
+    b: 237,
+};
+const WARNING: Color = Color::Rgb {
+    r: 220,
+    g: 38,
+    b: 38,
+};
+const DANGER: Color = Color::Rgb {
+    r: 220,
+    g: 38,
+    b: 38,
+};
 
 pub fn term_width() -> usize {
     terminal::size().map(|(w, _)| w as usize).unwrap_or(80)
 }
 
-/// Full-width box (minus 4 chars for the 2-space indent + │ + │).
 pub fn box_width() -> usize {
-    term_width().saturating_sub(4).min(92).max(56)
+    term_width().saturating_sub(4).min(94).max(58)
 }
 
 fn inner_width(bw: usize) -> usize {
     bw.saturating_sub(4)
 }
 
-// ─── word-wrap ──────────────────────────────────────────────────────────────
-
 pub fn wrap(text: &str, width: usize) -> Vec<String> {
     if width == 0 {
         return vec![text.to_string()];
     }
-    let mut lines: Vec<String> = Vec::new();
+
+    let mut lines = Vec::new();
     for para in text.split('\n') {
         if para.trim().is_empty() {
             lines.push(String::new());
             continue;
         }
-        let mut cur = String::new();
+
+        let mut current = String::new();
         for word in para.split_whitespace() {
-            let wlen = word.chars().count();
-            let clen = cur.chars().count();
-            if cur.is_empty() {
-                cur.push_str(word);
-            } else if clen + 1 + wlen <= width {
-                cur.push(' ');
-                cur.push_str(word);
+            let word_len = word.chars().count();
+            let current_len = current.chars().count();
+            if current.is_empty() {
+                current.push_str(word);
+            } else if current_len + 1 + word_len <= width {
+                current.push(' ');
+                current.push_str(word);
             } else {
-                lines.push(std::mem::take(&mut cur));
-                cur.push_str(word);
+                lines.push(std::mem::take(&mut current));
+                current.push_str(word);
             }
         }
-        if !cur.is_empty() {
-            lines.push(cur);
+        if !current.is_empty() {
+            lines.push(current);
         }
     }
+
     lines
 }
 
-// ─── low-level box drawing ──────────────────────────────────────────────────
+fn rail(color: Color) -> StyledContent<&'static str> {
+    "│".with(color)
+}
 
-fn pline(colored: impl std::fmt::Display, raw_len: usize, bw: usize) {
+fn top_border(bw: usize, color: Color) {
+    println!("  {}", format!("╭{}╮", "─".repeat(bw)).with(color));
+}
+
+fn rule(bw: usize, color: Color) {
+    println!("  {}", format!("├{}┤", "─".repeat(bw)).with(color));
+}
+
+fn bottom_border(bw: usize, color: Color) {
+    println!("  {}", format!("╰{}╯", "─".repeat(bw)).with(color));
+}
+
+fn body(colored: impl std::fmt::Display, raw_len: usize, bw: usize) {
     let inner = inner_width(bw);
     let pad = inner.saturating_sub(raw_len);
     println!("  │  {}{}  │", colored, " ".repeat(pad));
 }
 
-fn pindented(colored: impl std::fmt::Display, raw_len: usize, bw: usize) {
-    let avail = bw.saturating_sub(6);
-    let pad = avail.saturating_sub(raw_len);
-    println!("  │    {}{}  │", colored, " ".repeat(pad));
+fn section_bar(title: &str, subtitle: Option<&str>, accent: Color) {
+    match subtitle {
+        Some(value) if !value.is_empty() => println!(
+            "  {} {}  {}",
+            "◆".with(accent).bold(),
+            title.to_ascii_uppercase().with(accent).bold(),
+            value.with(SMOKE)
+        ),
+        _ => println!(
+            "  {} {}",
+            "◆".with(accent).bold(),
+            title.to_ascii_uppercase().with(accent).bold()
+        ),
+    }
 }
 
-// ─── header toolbar ─────────────────────────────────────────────────────────
+fn print_top_bar(title: &str, right: &str) {
+    let width = term_width().max(48);
+    let gap = width
+        .saturating_sub(title.chars().count() + right.chars().count() + 1)
+        .max(1);
+    println!();
+    println!(
+        " {}{}{}",
+        title.with(COPPER).bold(),
+        " ".repeat(gap),
+        right.with(SMOKE)
+    );
+    println!(
+        " {}",
+        "─".repeat(width.saturating_sub(1)).with(TEAL_SOFT).dim()
+    );
+    println!();
+}
+
+fn shorten_path(cwd: &str) -> String {
+    let parts: Vec<&str> = cwd.trim_end_matches('/').split('/').collect();
+    if parts.len() > 3 {
+        format!(
+            "…/{}/{}",
+            parts[parts.len().saturating_sub(2)],
+            parts[parts.len().saturating_sub(1)]
+        )
+    } else {
+        cwd.to_string()
+    }
+}
+
+fn risk_color(risk: &str) -> Color {
+    match risk.to_ascii_lowercase().as_str() {
+        "low" | "safe" => SUCCESS,
+        "high" | "critical" | "dangerous" => DANGER,
+        _ => WARNING,
+    }
+}
+
+fn draw_notice(title: &str, message: &str, accent: Color) {
+    let body_color = if accent == DANGER || accent == WARNING {
+        DANGER
+    } else {
+        CLOUD
+    };
+    println!();
+    println!("  {}", title.with(accent).bold());
+    for line in wrap(message, term_width().saturating_sub(4).min(96)) {
+        println!("  {}", line.as_str().with(body_color));
+    }
+    println!();
+}
 
 pub fn print_header(email: Option<&str>) {
-    let bw = box_width();
-    let iw = inner_width(bw);
-
-    let brand_raw = "◆ krud AI";
-    let brand_len = brand_raw.chars().count();
-
-    let right_raw = match email {
-        Some(e) => format!("AI terminal agent  ·  {}", e),
-        None => "AI terminal agent".to_string(),
-    };
-    let right_len = right_raw.chars().count();
-    let gap = iw.saturating_sub(brand_len + right_len);
-
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    println!(
-        "  │  {}{}{}  │",
-        brand_raw.with(PURPLE).bold(),
-        " ".repeat(gap),
-        right_raw.dark_grey()
-    );
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
+    print_top_bar("KRUD", email.unwrap_or("guest session"));
 }
 
-// ─── welcome hint ───────────────────────────────────────────────────────────
-
-pub fn print_welcome() {
-    println!(
-        "  {} Type your request and press Enter.  Type {} to quit.",
-        "◆".with(PURPLE),
-        "exit".white()
-    );
-    println!();
+pub fn print_section_title(title: &str, subtitle: Option<&str>) {
+    section_bar(title, subtitle, TEAL);
 }
 
-// ─── user bubble (right-aligned) ────────────────────────────────────────────
+pub fn print_kv(label: &str, value: &str) {
+    println!(
+        "  {} {:<11} {}",
+        rail(TEAL),
+        label.with(SMOKE).bold(),
+        value.with(CLOUD)
+    );
+}
 
 pub fn print_user_message(text: &str) {
     let tw = term_width();
-    let bw = (tw * 68 / 100).min(72).max(38);
-    let iw = bw.saturating_sub(4);
-    let left = tw.saturating_sub(bw + 4).max(2);
-    let indent = " ".repeat(left);
-
-    let lines = wrap(text, iw);
-
-    println!("{}╭{}╮", indent, "─".repeat(bw));
-    for line in &lines {
-        let raw_len = line.chars().count();
-        let pad = iw.saturating_sub(raw_len);
-        println!("{}│  {}{}  │", indent, line, " ".repeat(pad));
+    let block_width = (tw * 54 / 100).min(70).max(22);
+    for line in wrap(text, block_width) {
+        let indent = tw.saturating_sub(line.chars().count()).saturating_sub(2);
+        println!("{}{}", " ".repeat(indent), line.as_str().with(CLOUD).bold());
     }
-
-    let you = " You ";
-    let you_len = you.chars().count();
-    let total_dashes = bw.saturating_sub(you_len);
-    let ld = 4.min(total_dashes);
-    let rd = total_dashes - ld;
-    println!(
-        "{}╰{}{}{}╯",
-        indent,
-        "─".repeat(ld),
-        you.white().bold(),
-        "─".repeat(rd)
-    );
     println!();
 }
 
-// ─── thinking indicator ──────────────────────────────────────────────────────
-//
-//  Printed inline (no newline) so we can erase it cleanly when the response
-//  arrives.  Uses \r + ANSI CSI 2K (erase entire line) to clear in-place
-//  without scrolling or redrawing anything else on screen.
+pub fn print_assistant_message(text: &str, model: &str) {
+    let wrap_width = term_width().saturating_sub(6).min(92).max(40);
 
-pub fn print_thinking() {
-    print!("  {} Thinking…", "◆".with(PURPLE).bold());
-    std::io::stdout().flush().ok();
-}
-
-/// Erase the thinking line so the response can be printed in its place.
-pub fn clear_thinking() {
-    print!("\r\x1B[2K");
-    std::io::stdout().flush().ok();
-}
-
-// ─── assistant message (left, no box) ───────────────────────────────────────
-
-pub fn print_assistant_message(
-    text: &str,
-    model: &str,
-    prompt_tokens: i64,
-    completion_tokens: i64,
-) {
-    let bw = box_width();
-    let iw = inner_width(bw);
-
-    let brand_raw = "◆ krud AI";
-    let brand_len = brand_raw.chars().count();
-    let sep = "  ·  ";
-    let sep_len = sep.chars().count();
-    let model_len = model.chars().count();
-    let tok_raw = format!("{}↑  {}↓", prompt_tokens, completion_tokens);
-    let tok_len = tok_raw.chars().count();
-
-    let total_header = brand_len + sep_len + model_len + sep_len + tok_len;
-    let gap = (bw + 2).saturating_sub(total_header);
-
-    println!(
-        "  {}{}{}{}{}{}",
-        brand_raw.with(PURPLE).bold(),
-        sep.with(PURPLE_DIM),
-        model.dark_grey(),
-        sep.with(PURPLE_DIM),
-        tok_raw.dark_grey(),
-        " ".repeat(gap)
-    );
-    println!("  {}", "─".repeat(bw + 2));
-
-    let lines = wrap(text, iw + 2);
-    for line in &lines {
+    println!("  {}", format!("krud · {}", model).with(COPPER).bold());
+    for line in wrap(text, wrap_width) {
         if line.is_empty() {
             println!();
         } else {
-            println!("  {}", line);
+            println!("  {}", line.as_str().with(CLOUD));
         }
     }
     println!();
-}
-
-// ─── command proposal card ───────────────────────────────────────────────────
-
-fn risk_color(risk: &str) -> crossterm::style::Color {
-    match risk.to_lowercase().as_str() {
-        "low" | "safe" => crossterm::style::Color::Green,
-        "high" | "critical" | "dangerous" => crossterm::style::Color::Red,
-        _ => crossterm::style::Color::Yellow,
-    }
 }
 
 pub fn print_command_proposal(
@@ -251,383 +251,571 @@ pub fn print_command_proposal(
     total: usize,
 ) {
     let bw = box_width();
-    let iw = inner_width(bw);
+    let accent = risk_color(risk);
+    let risk_label = format!("risk {}", risk.to_ascii_lowercase());
+    let command_width = inner_width(bw).saturating_sub(2);
 
-    let label_raw = format!("Command {}/{}", index + 1, total);
-    let label_len = label_raw.chars().count();
-    let risk_raw = format!("⚠ {}", risk);
-    let risk_len = risk_raw.chars().count();
-    let rc = risk_color(risk);
-
-    let inner_header = bw.saturating_sub(2 + label_len + 1 + risk_len + 2);
-    println!(
-        "  ╭─ {} {}─ {} ─╮",
-        label_raw.bold(),
-        "─".repeat(inner_header),
-        risk_raw.with(rc).bold()
-    );
-
-    let cmd_max = iw.saturating_sub(2);
-    let cmd_display: String = if command.chars().count() > cmd_max {
-        command.chars().take(cmd_max.saturating_sub(1)).collect::<String>() + "…"
+    let command_display = if command.chars().count() > command_width {
+        let mut truncated: String = command
+            .chars()
+            .take(command_width.saturating_sub(1))
+            .collect();
+        truncated.push('…');
+        truncated
     } else {
         command.to_string()
     };
-    let cmd_raw_len = 2 + cmd_display.chars().count();
 
-    println!("  │{}│", " ".repeat(bw));
-    pline(
-        format!("{} {}", "$".dark_grey(), cmd_display.yellow().bold()),
-        cmd_raw_len,
-        bw,
-    );
-    println!("  │{}│", " ".repeat(bw));
-
-    let rat_lines = wrap(rationale, iw.saturating_sub(2));
-    for line in &rat_lines {
-        pindented(line.as_str().dark_grey(), line.chars().count(), bw);
-    }
-
-    println!("  ├{}┤", "─".repeat(bw));
-    let actions_raw_len = "[r] Run now   [q] Queue   [s] Skip".chars().count();
-    pline(
-        format!(
-            "{} Run now   {} Queue   {} Skip",
-            "[r]".green().bold(),
-            "[q]".blue().bold(),
-            "[s]".dark_grey()
-        ),
-        actions_raw_len,
-        bw,
-    );
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
-}
-
-// ─── input area — single static robot + open input box ───────────────────────
-//
-//  The robot is drawn ONCE per prompt, always in the Idle pose (frame 0).
-//  No background animation thread — eliminates all glitches.
-
-pub fn print_input_area(cwd: Option<&str>) {
-    use crate::rabbit::{self, RabbitState};
-    // Single static robot — always frame 0, always Idle pose.
-    rabbit::print_rabbit(RabbitState::Idle, 0);
-
-    let bw = box_width();
-
-    let cwd_short = cwd.map(|dir| {
-        let parts: Vec<&str> = dir.trim_end_matches('/').split('/').collect();
-        if parts.len() > 2 {
-            format!("…/{}/{}", parts[parts.len() - 2], parts[parts.len() - 1])
-        } else {
-            dir.to_string()
-        }
-    });
-
-    if let Some(ref short) = cwd_short {
-        let short_len = short.chars().count();
-        let dashes = bw.saturating_sub(3 + short_len + 1);
-        println!(
-            "  ╭─ {} {}",
-            short.as_str().dark_grey(),
-            "─".repeat(dashes)
-        );
-    } else {
-        println!("  ╭{}", "─".repeat(bw + 1));
-    }
-}
-
-/// Print the `›` prompt — cursor sits here, no newline.
-pub fn print_prompt() {
-    print!("  │  {} ", "›".with(PURPLE).bold());
-    std::io::stdout().flush().ok();
-}
-
-/// Print the decision prompt (inline, after command proposal).
-pub fn print_decision_prompt() {
-    print!("  │  {} ", "›".dark_grey());
-    std::io::stdout().flush().ok();
-}
-
-// ─── login screen ────────────────────────────────────────────────────────────
-
-/// Full login screen — shows URL prominently so the user can copy it.
-pub fn print_login_screen(url: &str) {
-    let bw = box_width();
-    let iw = inner_width(bw);
-
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("◆ krud AI  ·  Login".with(PURPLE).bold(), 19, bw);
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
-    println!("  {} Open this URL in your browser to sign in:", "◆".with(PURPLE));
-    println!();
-
-    // URL box — wrap if too long
-    let url_lines = wrap(url, iw);
-    println!("  ╭{}╮", "─".repeat(bw));
-    for line in &url_lines {
-        pline(line.as_str().with(PURPLE).bold().underlined(), line.chars().count(), bw);
-    }
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
     println!(
-        "  {} Your browser should open automatically. If not, copy the URL above.",
-        "◆".dark_grey()
+        "  {}",
+        format!("action {}/{} · {}", index + 1, total, risk_label)
+            .with(SMOKE)
+            .bold()
     );
+    top_border(bw, accent);
+    body(
+        format!("$ {}", command_display).with(CLOUD).bold(),
+        2 + command_display.chars().count(),
+        bw,
+    );
+    for line in wrap(rationale, inner_width(bw)) {
+        body(line.as_str().with(CLOUD), line.chars().count(), bw);
+    }
+    rule(bw, accent);
+    body(
+        format!(
+            "{} run now   {} queue for daemon   {} skip",
+            "[r]".with(SUCCESS).bold(),
+            "[q]".with(TEAL).bold(),
+            "[s]".with(SMOKE).bold()
+        ),
+        41,
+        bw,
+    );
+    bottom_border(bw, accent);
     println!();
 }
 
-/// Inline waiting indicator — no newline so we can erase it.
-pub fn print_login_waiting() {
-    print!("  {} Waiting for browser approval…", "◆".with(PURPLE));
+pub fn print_decision_prompt() {
+    print!("  {} ", "choose [r/q/s] >".with(TEAL).bold());
     std::io::stdout().flush().ok();
 }
 
-/// Erase the waiting line.
+pub fn print_action_summary(ran: usize, queued: usize, skipped: usize) {
+    let summary = format!("ran {}   queued {}   skipped {}", ran, queued, skipped);
+    println!("  {}", "reply complete".with(COPPER).bold());
+    println!("  {}", summary.with(CLOUD));
+    println!();
+}
+
+pub fn print_login_screen(url: &str) {
+    print_top_bar("KRUD", "device flow");
+    println!(
+        "  {}",
+        "Approve this machine in your browser using the link below.".with(CLOUD)
+    );
+    println!();
+    for line in wrap(url, term_width().saturating_sub(4).min(96)) {
+        println!("  {}", line.as_str().with(COPPER).bold().underlined());
+    }
+    println!();
+    for line in wrap(
+        "If a browser window does not open, paste the URL manually.",
+        term_width().saturating_sub(4).min(96),
+    ) {
+        println!("  {}", line.as_str().with(SMOKE));
+    }
+    println!();
+}
+
+pub fn print_login_waiting() {
+    print!(
+        "  {} {}",
+        "waiting".with(TEAL).bold(),
+        "browser approval pending…".with(SMOKE)
+    );
+    std::io::stdout().flush().ok();
+}
+
 pub fn clear_login_waiting() {
     print!("\r\x1B[2K");
     std::io::stdout().flush().ok();
 }
 
-/// Show after successful login.
 pub fn print_login_success(email: &str) {
-    let bw = box_width();
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline(
-        format!("✓  Logged in as {}", email).with(PURPLE).bold(),
-        14 + email.chars().count(),
-        bw,
+    print_top_bar("KRUD", "connected");
+    draw_notice(
+        "login complete",
+        &format!("Authenticated as {email}. Run `krud` or `krud chat` to start."),
+        SUCCESS,
     );
-    pline(
-        "   Run krud chat to start".dark_grey(),
-        25,
-        bw,
-    );
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
 }
 
-/// Show when device code expires before the user approves.
 pub fn print_login_expired() {
-    let bw = box_width();
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("✗  Login code expired".red().bold(), 21, bw);
-    println!("  ├{}┤", "─".repeat(bw));
-    pline("Run krud login again to get a fresh code.".dark_grey(), 41, bw);
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
+    print_top_bar("KRUD", "device flow");
+    draw_notice(
+        "login expired",
+        "The device code timed out before approval finished. Run `krud login` again.",
+        DANGER,
+    );
 }
 
-// ─── connection check screens ─────────────────────────────────────────────────
-
-/// Inline "connecting…" — no newline so we can erase it.
 pub fn print_connecting() {
-    print!("  {} Connecting to krud API…", "◆".with(PURPLE));
+    print!(
+        "  {} {}",
+        "sync".with(TEAL).bold(),
+        "connecting to krud cloud…".with(SMOKE)
+    );
     std::io::stdout().flush().ok();
 }
 
-/// Erase the connecting line.
 pub fn clear_connecting() {
     print!("\r\x1B[2K");
     std::io::stdout().flush().ok();
 }
 
-/// Shown when API responds OK.
-pub fn print_connected() {
-    println!("  {} Connected  ✓", "◆".with(PURPLE));
-}
-
-/// Shown when the API is unreachable.
 pub fn print_connect_failed(api_url: &str) {
-    let bw = box_width();
-    let iw = inner_width(bw);
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("✗  Cannot reach krud API".red().bold(), 24, bw);
-    println!("  ├{}┤", "─".repeat(bw));
-    let url_lines = wrap(api_url, iw);
-    for line in &url_lines {
-        pline(line.as_str().dark_grey(), line.chars().count(), bw);
-    }
-    println!("  ├{}┤", "─".repeat(bw));
-    pline("• Check your internet connection".dark_grey(), 32, bw);
-    pline("• The service may be restarting — try again in 30s".dark_grey(), 50, bw);
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
+    print_top_bar("KRUD", "offline");
+    draw_notice(
+        "service unreachable",
+        &format!(
+            "Krud could not reach the API endpoint at {}. Check connectivity or wait for the backend to recover.",
+            api_url
+        ),
+        DANGER,
+    );
 }
 
-// ─── auth screens ─────────────────────────────────────────────────────────────
-
-/// Shown when the user runs krud chat without logging in first.
 pub fn print_not_logged_in() {
-    let bw = box_width();
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("◆ Not logged in".with(PURPLE).bold(), 15, bw);
-    println!("  ├{}┤", "─".repeat(bw));
-    pline(
-        format!("Run {} to authenticate.", "krud login".with(PURPLE).bold()),
-        28,
-        bw,
+    print_top_bar("KRUD", "sign in");
+    draw_notice(
+        "authentication required",
+        "Run `krud login` to connect this machine before opening a chat session.",
+        WARNING,
     );
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
 }
 
-/// Shown when the stored session token is rejected by the API (expired/revoked).
 pub fn print_session_expired() {
-    let bw = box_width();
-    println!();
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("◆ Session expired".with(PURPLE).bold(), 17, bw);
-    println!("  ├{}┤", "─".repeat(bw));
-    pline(
-        format!("Run {} to log in again.", "krud login".with(PURPLE).bold()),
-        29,
-        bw,
+    print_top_bar("KRUD", "session");
+    draw_notice(
+        "session expired",
+        "Your stored session token was rejected. Run `krud login` again to refresh it.",
+        WARNING,
     );
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
 }
-
-// ─── error / info ────────────────────────────────────────────────────────────
 
 pub fn print_error(msg: &str) {
-    let bw = box_width();
-    let iw = inner_width(bw);
-    let lines = wrap(msg, iw);
-    println!("  ╭{}╮", "─".repeat(bw));
-    pline("Error".red().bold(), 5, bw);
-    println!("  ├{}┤", "─".repeat(bw));
-    for line in &lines {
-        pline(line.as_str().red(), line.chars().count(), bw);
-    }
-    println!("  ╰{}╯", "─".repeat(bw));
-    println!();
+    draw_notice("error", msg, DANGER);
 }
 
 pub fn print_info(msg: &str) {
-    println!("  {} {}", "◆".with(PURPLE), msg.dark_grey());
+    println!("  {} {}", "info".with(TEAL).bold(), msg.with(SMOKE));
 }
 
-// ─── token budget bar ────────────────────────────────────────────────────────
-//
-//  ◆ 12,400 / 40,000 tokens  ▓▓▓▓▓▓░░░░░░░░░░░░░░  31%  resets 04:22
-
-pub fn print_token_budget(used: i64, limit: i64, resets_at: &str) {
-    if limit <= 0 {
-        return;
-    }
-
-    let pct = ((used as f64 / limit as f64) * 100.0).min(100.0) as u64;
-
-    let bar_width: usize = 20;
-    let filled = ((pct as usize) * bar_width / 100).min(bar_width);
-    let empty = bar_width - filled;
-    let bar = format!("{}{}", "▓".repeat(filled), "░".repeat(empty));
-
-    let coloured_bar = if pct < 70 {
-        bar.green().to_string()
-    } else if pct < 90 {
-        bar.yellow().to_string()
-    } else {
-        bar.red().to_string()
-    };
-
-    let reset_hint = parse_reset_hint(resets_at);
-
-    let bw = box_width();
-    let label = format!(
-        "{} / {} tokens  {}  {}%  resets {}",
-        fmt_num(used),
-        fmt_num(limit),
-        coloured_bar,
-        pct,
-        reset_hint,
-    );
-
-    let max_len = bw.saturating_sub(6);
-    let display: String = if label.chars().count() > max_len {
-        let mut s: String = label.chars().take(max_len).collect();
-        s.push('…');
-        s
-    } else {
-        label
-    };
-
-    println!("  {} {}", "◆".with(PURPLE), display.dark_grey());
-    println!();
+pub fn print_success(msg: &str) {
+    println!("  {} {}", "done".with(SUCCESS).bold(), msg.with(CLOUD));
 }
 
-fn fmt_num(n: i64) -> String {
-    let s = n.to_string();
-    let mut result = String::new();
-    for (i, ch) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            result.push(',');
+#[derive(Clone)]
+pub enum FullscreenItem {
+    Welcome(String),
+    User(String),
+    Assistant {
+        model: String,
+        text: String,
+    },
+    Action {
+        command: String,
+        rationale: String,
+        risk: String,
+        index: usize,
+        total: usize,
+    },
+    Info(String),
+    Success(String),
+    Error(String),
+}
+
+struct ScreenLine {
+    text: String,
+    fg: Color,
+    bold: bool,
+    dim: bool,
+}
+
+impl ScreenLine {
+    fn new(text: String, fg: Color) -> Self {
+        Self {
+            text,
+            fg,
+            bold: false,
+            dim: false,
         }
-        result.push(ch);
     }
-    result.chars().rev().collect()
+
+    fn bold(mut self) -> Self {
+        self.bold = true;
+        self
+    }
+
+    fn dim(mut self) -> Self {
+        self.dim = true;
+        self
+    }
+
+    fn blank() -> Self {
+        Self::new(String::new(), CLOUD)
+    }
 }
 
-fn parse_reset_hint(resets_at: &str) -> String {
-    if let Some(remaining_secs) = remaining_seconds(resets_at) {
-        if remaining_secs <= 0 {
-            return "now".to_string();
-        }
-        let h = remaining_secs / 3600;
-        let m = (remaining_secs % 3600) / 60;
-        if h > 0 {
-            return format!("{h}h {m:02}m");
-        }
-        return format!("{m}m");
+pub struct FullscreenGuard;
+
+impl FullscreenGuard {
+    pub fn enter() -> io::Result<Self> {
+        let mut stdout = io::stdout();
+        enable_raw_mode()?;
+        execute!(stdout, EnterAlternateScreen, Hide)?;
+        Ok(Self)
     }
-    resets_at.get(..16).unwrap_or(resets_at).to_string()
 }
 
-fn remaining_seconds(iso: &str) -> Option<i64> {
-    let s = iso.trim();
-    let dt_part = s.split('+').next().unwrap_or(s).trim_end_matches('Z');
-    let parts: Vec<&str> = dt_part.splitn(2, 'T').collect();
-    if parts.len() != 2 {
-        return None;
+impl Drop for FullscreenGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, Show, LeaveAlternateScreen);
     }
-    let date_parts: Vec<u64> = parts[0].split('-').filter_map(|p| p.parse().ok()).collect();
-    let time_parts: Vec<u64> = parts[1]
-        .split(':')
-        .filter_map(|p| p.parse::<f64>().map(|f| f as u64).ok())
+}
+
+pub fn render_fullscreen(
+    email: Option<&str>,
+    cwd: Option<&str>,
+    items: &[FullscreenItem],
+    input_label: &str,
+    input_value: &str,
+    scroll_from_bottom: usize,
+    toy_frame: usize,
+    toy_burst: u8,
+) -> io::Result<()> {
+    let (w, h) = terminal::size()?;
+    let width = w as usize;
+    let height = h as usize;
+
+    let header = fullscreen_header_lines(email, cwd, width);
+    let composer =
+        fullscreen_composer_lines(cwd, input_label, input_value, width, toy_frame, toy_burst);
+
+    let reserved = header.len() + composer.len();
+    let chat_height = height.saturating_sub(reserved).max(1);
+
+    let mut transcript = Vec::new();
+    for (index, item) in items.iter().enumerate() {
+        if index > 0 {
+            let gap = item_gap(&items[index - 1], item);
+            for _ in 0..gap {
+                transcript.push(ScreenLine::blank());
+            }
+        }
+        transcript.extend(fullscreen_item_lines(item, width));
+    }
+
+    let max_scroll = transcript.len().saturating_sub(chat_height);
+    let hidden = scroll_from_bottom.min(max_scroll);
+    let start = transcript
+        .len()
+        .saturating_sub(chat_height.saturating_add(hidden));
+    let visible: Vec<ScreenLine> = transcript
+        .into_iter()
+        .skip(start)
+        .take(chat_height)
         .collect();
-    if date_parts.len() != 3 || time_parts.len() < 2 {
-        return None;
+
+    let mut stdout = io::stdout();
+    execute!(stdout, MoveTo(0, 0))?;
+
+    let mut row = 0u16;
+    for line in header {
+        write_screen_line(&mut stdout, row, &line, width, height)?;
+        row += 1;
     }
-    let y = date_parts[0];
-    let mo = date_parts[1];
-    let d = date_parts[2];
-    let h = time_parts[0];
-    let mi = time_parts.get(1).copied().unwrap_or(0);
-    let sec = time_parts.get(2).copied().unwrap_or(0);
 
-    let leap_years = (1970..y)
-        .filter(|&yr| yr % 4 == 0 && (yr % 100 != 0 || yr % 400 == 0))
-        .count() as u64;
-    let days_in_year = y.saturating_sub(1970) * 365 + leap_years;
-    let month_days: [u64; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-    let days_in_month: u64 =
-        month_days[..((mo as usize).saturating_sub(1)).min(12)].iter().sum();
-    let total_days = days_in_year + days_in_month + d.saturating_sub(1);
-    let target_unix = total_days * 86400 + h * 3600 + mi * 60 + sec;
+    for line in visible {
+        write_screen_line(&mut stdout, row, &line, width, height)?;
+        row += 1;
+    }
 
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let now_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()?
-        .as_secs();
+    while row < (height.saturating_sub(composer.len())) as u16 {
+        write_screen_line(&mut stdout, row, &ScreenLine::blank(), width, height)?;
+        row += 1;
+    }
 
-    Some(target_unix as i64 - now_unix as i64)
+    for line in composer {
+        write_screen_line(&mut stdout, row, &line, width, height)?;
+        row += 1;
+    }
+
+    stdout.flush()?;
+    Ok(())
+}
+
+fn write_screen_line(
+    stdout: &mut io::Stdout,
+    row: u16,
+    line: &ScreenLine,
+    width: usize,
+    height: usize,
+) -> io::Result<()> {
+    let rendered = fit_line(line, width);
+    queue!(
+        stdout,
+        MoveTo(0, row),
+        SetBackgroundColor(background_for_row(row as usize, height)),
+        SetForegroundColor(line.fg),
+        SetAttribute(Attribute::Reset)
+    )?;
+    if line.bold {
+        queue!(stdout, SetAttribute(Attribute::Bold))?;
+    }
+    if line.dim {
+        queue!(stdout, SetAttribute(Attribute::Dim))?;
+    }
+    queue!(
+        stdout,
+        Print(rendered),
+        ResetColor,
+        SetAttribute(Attribute::Reset)
+    )?;
+    Ok(())
+}
+
+fn fit_line(line: &ScreenLine, width: usize) -> String {
+    let mut out: String = line.text.chars().take(width).collect();
+    let current = out.chars().count();
+    if current < width {
+        out.push_str(&" ".repeat(width - current));
+    }
+    out
+}
+
+fn background_for_row(row: usize, height: usize) -> Color {
+    let _ = (row, height);
+    Color::Rgb {
+        r: 255,
+        g: 255,
+        b: 255,
+    }
+}
+
+fn item_gap(previous: &FullscreenItem, current: &FullscreenItem) -> usize {
+    if matches!(current, FullscreenItem::Action { .. })
+        || matches!(
+            current,
+            FullscreenItem::Info(_) | FullscreenItem::Success(_) | FullscreenItem::Error(_)
+        )
+        || matches!(previous, FullscreenItem::Action { .. })
+    {
+        0
+    } else {
+        1
+    }
+}
+
+fn fullscreen_header_lines(
+    email: Option<&str>,
+    cwd: Option<&str>,
+    width: usize,
+) -> Vec<ScreenLine> {
+    let right = cwd
+        .map(shorten_path)
+        .or_else(|| email.map(|value| value.to_string()))
+        .unwrap_or_else(|| "guest session".to_string());
+    let title = "KRUD";
+    let gap = width.saturating_sub(4 + title.len() + right.len());
+    vec![
+        ScreenLine::new(format!("  {}{}{}", title, " ".repeat(gap), right), CLOUD).bold(),
+        ScreenLine::new(
+            format!("  {}", "─".repeat(width.saturating_sub(4))),
+            TEAL_SOFT,
+        )
+        .dim(),
+    ]
+}
+
+fn fullscreen_composer_lines(
+    cwd: Option<&str>,
+    input_label: &str,
+    input_value: &str,
+    width: usize,
+    toy_frame: usize,
+    toy_burst: u8,
+) -> Vec<ScreenLine> {
+    let workspace = cwd
+        .map(shorten_path)
+        .unwrap_or_else(|| "unknown workspace".to_string());
+    let frame_width = width.saturating_sub(6);
+    let inner = frame_width.saturating_sub(4);
+    let prompt = format!("{input_label} {input_value}");
+    let visible_prompt = if prompt.chars().count() > inner {
+        let keep = inner.saturating_sub(1);
+        let chars: Vec<char> = prompt.chars().collect();
+        chars[chars.len().saturating_sub(keep)..]
+            .iter()
+            .collect::<String>()
+    } else {
+        prompt
+    };
+    let sigil = prompt_sigil(toy_frame, toy_burst);
+    let prompt_text = format!("{sigil}  {visible_prompt}");
+    let prompt_width = 3 + visible_prompt.chars().count();
+    vec![
+        ScreenLine::new(
+            format!(
+                "  workspace {}  ·  PgUp/PgDn scroll  ·  /help /new /status /clear  ·  exit",
+                workspace
+            ),
+            SMOKE,
+        )
+        .dim(),
+        ScreenLine::new(format!("  ╭{}╮", "─".repeat(frame_width)), SMOKE),
+        ScreenLine::new(
+            format!(
+                "  │ {}{} │",
+                prompt_text,
+                " ".repeat(inner.saturating_sub(prompt_width))
+            ),
+            CLOUD,
+        ),
+        ScreenLine::new(format!("  ╰{}╯", "─".repeat(frame_width)), SMOKE),
+    ]
+}
+
+fn prompt_sigil(frame: usize, burst: u8) -> String {
+    if burst > 0 {
+        return "◈".to_string();
+    }
+
+    match frame % 4 {
+        0 => "◌",
+        1 => "◍",
+        2 => "◉",
+        _ => "◍",
+    }
+    .to_string()
+}
+
+fn fullscreen_item_lines(item: &FullscreenItem, width: usize) -> Vec<ScreenLine> {
+    match item {
+        FullscreenItem::Welcome(text) => {
+            plain_left_block("krud", text, width.saturating_sub(2), true)
+        }
+        FullscreenItem::User(text) => plain_right_block("you", text, width.saturating_sub(2)),
+        FullscreenItem::Assistant { model, text } => plain_left_block(
+            &format!("krud · {}", model),
+            text,
+            width.saturating_sub(2),
+            false,
+        ),
+        FullscreenItem::Action {
+            command,
+            rationale,
+            risk,
+            index,
+            total,
+        } => action_panel(
+            command,
+            rationale,
+            risk,
+            *index,
+            *total,
+            width.saturating_sub(2),
+        ),
+        FullscreenItem::Info(text) => note_block("info", text, width.saturating_sub(2), SMOKE),
+        FullscreenItem::Success(text) => note_block("done", text, width.saturating_sub(2), SUCCESS),
+        FullscreenItem::Error(text) => note_block("error", text, width.saturating_sub(2), DANGER),
+    }
+}
+
+fn plain_left_block(label: &str, text: &str, width: usize, welcome: bool) -> Vec<ScreenLine> {
+    let block_width = if welcome {
+        width.min(68).max(34)
+    } else {
+        width.min(88).max(42)
+    };
+    let mut lines = vec![ScreenLine::new(format!("   {}", label), COPPER).bold()];
+    for line in wrap(text, block_width) {
+        lines.push(ScreenLine::new(format!("   {}", line), CLOUD));
+    }
+    lines
+}
+
+fn plain_right_block(_label: &str, text: &str, width: usize) -> Vec<ScreenLine> {
+    let block_width = (width * 48 / 100).min(56).max(20);
+    let mut lines = Vec::new();
+    for line in wrap(text, block_width) {
+        let indent = width.saturating_sub(line.chars().count()).saturating_sub(4);
+        lines.push(ScreenLine::new(
+            format!("{}{}", " ".repeat(indent), line),
+            CLOUD,
+        ));
+    }
+    lines
+}
+
+fn action_panel(
+    command: &str,
+    rationale: &str,
+    risk: &str,
+    index: usize,
+    total: usize,
+    width: usize,
+) -> Vec<ScreenLine> {
+    let accent = risk_color(risk);
+    let bw = width.saturating_sub(10).min(98).max(46);
+    let inner = bw.saturating_sub(4);
+    let mut lines = vec![ScreenLine::new(
+        format!("   proposed action {} of {}", index + 1, total),
+        accent,
+    )
+    .bold()];
+    lines.push(ScreenLine::new(format!("   ╭{}╮", "─".repeat(bw)), accent));
+    let command_lines = wrap(&format!("$ {}", command), inner);
+    for line in command_lines {
+        let len = line.chars().count();
+        lines.push(ScreenLine::new(
+            format!("   │ {}{} │", line, " ".repeat(inner.saturating_sub(len))),
+            CLOUD,
+        ));
+    }
+    for line in wrap(rationale, inner) {
+        let len = line.chars().count();
+        lines.push(ScreenLine::new(
+            format!("   │ {}{} │", line, " ".repeat(inner.saturating_sub(len))),
+            SMOKE,
+        ));
+    }
+    let action_text = "[r] run now    [q] queue for daemon    [s] skip";
+    lines.push(ScreenLine::new(
+        format!(
+            "   │ {}{} │",
+            action_text,
+            " ".repeat(inner.saturating_sub(action_text.chars().count()))
+        ),
+        COPPER_SOFT,
+    ));
+    lines.push(ScreenLine::new(format!("   ╰{}╯", "─".repeat(bw)), accent));
+    lines
+}
+
+fn note_block(label: &str, text: &str, width: usize, color: Color) -> Vec<ScreenLine> {
+    let mut lines = Vec::new();
+    let wrap_width = width.saturating_sub(label.len() + 6).max(14);
+    for line in wrap(text, wrap_width) {
+        let item = ScreenLine::new(format!("   {} {}", label, line), color);
+        if color == DANGER || color == WARNING {
+            lines.push(item.bold());
+        } else {
+            lines.push(item.dim());
+        }
+    }
+    lines
 }

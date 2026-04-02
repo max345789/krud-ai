@@ -149,6 +149,7 @@ class Database:
                     id text primary key,
                     email text not null unique,
                     name text,
+                    password_hash text,
                     subscription_status text not null,
                     trial_ends_at text not null,
                     billing_customer_id text,
@@ -222,6 +223,100 @@ class Database:
 
     def _iso(self, value: datetime) -> str:
         return value.isoformat()
+
+    # ── password auth helpers ──────────────────────────────────────────────────
+
+    def _ensure_password_hash_column(self) -> None:
+        """Add password_hash column to existing SQLite DBs that predate this migration."""
+        if not self._uses_sqlite:
+            return
+        with self._lock, self.connect() as conn:
+            try:
+                conn.execute("alter table users add column password_hash text")
+                conn.commit()
+            except Exception:
+                pass  # Column already exists — normal for new DBs
+
+    def signup_with_password(
+        self, email: str, password_hash: str, name: str | None
+    ) -> dict:
+        """
+        Create a new user with email+password, start a trial, and return a session token.
+        Raises ValueError if the email is already registered.
+        """
+        now = self._now()
+        user_id = f"user_{secrets.token_hex(8)}"
+        trial_ends_at = self._iso(now + timedelta(days=settings.trial_days))
+        safe_email = email.strip().lower()
+
+        with self._lock, self.connect() as conn:
+            existing = self._fetchone(
+                conn,
+                "select id from users where email = %s",
+                (safe_email,),
+                sqlite_query="select id from users where email = ?",
+                sqlite_params=(safe_email,),
+            )
+            if existing is not None:
+                raise ValueError("Email already registered")
+
+            self._execute(
+                conn,
+                """
+                insert into users
+                    (id, email, name, password_hash, subscription_status,
+                     trial_ends_at, billing_customer_id, billing_subscription_id, created_at)
+                values (%s, %s, %s, %s, 'trialing', %s, null, null, %s)
+                """,
+                (user_id, safe_email, name, password_hash, trial_ends_at, self._iso(now)),
+                sqlite_query="""
+                insert into users
+                    (id, email, name, password_hash, subscription_status,
+                     trial_ends_at, billing_customer_id, billing_subscription_id, created_at)
+                values (?, ?, ?, ?, 'trialing', ?, null, null, ?)
+                """,
+                sqlite_params=(user_id, safe_email, name, password_hash, trial_ends_at, self._iso(now)),
+            )
+            token = self._create_session_token(conn, user_id, now)
+
+        return {
+            "token": token,
+            "user_id": user_id,
+            "email": safe_email,
+            "name": name,
+            "subscription_status": "trialing",
+            "trial_ends_at": trial_ends_at,
+        }
+
+    def get_user_for_password_auth(self, email: str) -> dict | None:
+        """Return the full user row including password_hash for login verification."""
+        safe_email = email.strip().lower()
+        with self.connect() as conn:
+            return self._fetchone(
+                conn,
+                "select * from users where email = %s",
+                (safe_email,),
+                sqlite_query="select * from users where email = ?",
+                sqlite_params=(safe_email,),
+                dict_row=True,
+            )
+
+    def create_session_for_user(self, user_id: str) -> str:
+        """Create and return a new session token for an existing user."""
+        now = self._now()
+        with self._lock, self.connect() as conn:
+            return self._create_session_token(conn, user_id, now)
+
+    def _create_session_token(self, conn, user_id: str, now: datetime) -> str:
+        token = f"krud_{secrets.token_urlsafe(24)}"
+        self._execute(
+            conn,
+            "insert into auth_sessions (token, user_id, created_at) values (%s, %s, %s)",
+            (token, user_id, self._iso(now)),
+            sqlite_query="insert into auth_sessions (token, user_id, created_at) values (?, ?, ?)",
+            sqlite_params=(token, user_id, self._iso(now)),
+        )
+        return token
 
     def create_device_code(self, client_name: str) -> dict[str, str]:
         now = self._now()

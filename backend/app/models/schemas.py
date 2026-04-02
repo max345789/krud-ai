@@ -35,6 +35,50 @@ SubscriptionStatus = Literal["trialing", "active", "past_due", "canceled"]
 _STRICT = ConfigDict(extra="forbid")
 
 
+# ── Email / password auth ─────────────────────────────────────────────────────
+
+class AuthSignupRequest(BaseModel):
+    model_config = _STRICT
+
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    name: str | None = Field(default=None, max_length=120)
+
+    @field_validator("name")
+    @classmethod
+    def _clean_name(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if "\x00" in v:
+            raise ValueError("Null bytes are not permitted")
+        return v.strip() or None
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        if "\x00" in v:
+            raise ValueError("Null bytes are not permitted")
+        if not any(c.isdigit() for c in v):
+            raise ValueError("Password must contain at least one number")
+        if not any(c.isalpha() for c in v):
+            raise ValueError("Password must contain at least one letter")
+        return v
+
+
+class AuthLoginRequest(BaseModel):
+    model_config = _STRICT
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthTokenResponse(BaseModel):
+    token: str
+    email: str
+    name: str | None = None
+    subscription_status: str
+
+
 # ── Device auth ───────────────────────────────────────────────────────────────
 
 class DeviceStartRequest(BaseModel):

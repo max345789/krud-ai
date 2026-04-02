@@ -167,7 +167,8 @@ impl AppPaths {
 }
 
 pub fn api_base_url() -> String {
-    std::env::var("KRUD_API_BASE_URL").unwrap_or_else(|_| "https://krud-api.onrender.com".to_string())
+    std::env::var("KRUD_API_BASE_URL")
+        .unwrap_or_else(|_| "https://krud-api.onrender.com".to_string())
 }
 
 pub fn store_session_token(token: &str) -> Result<()> {

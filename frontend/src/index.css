@@ -322,6 +322,13 @@ pre {
   border-color: rgba(255, 255, 255, 0.24);
 }
 
+.button:disabled,
+.button[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .button-link {
   padding-inline: 0;
   min-height: auto;
@@ -1336,6 +1343,15 @@ pre {
 .field textarea:focus {
   border-color: var(--accent);
   background: rgba(255, 255, 255, 0.06);
+  outline: 2px solid rgba(240, 140, 90, 0.35);
+  outline-offset: 2px;
+}
+
+.field input:disabled,
+.field textarea:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .auth-success {
@@ -1458,6 +1474,11 @@ pre {
   color: var(--dim);
 }
 
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 @keyframes marquee {
   from {
     transform: translateX(0);
@@ -1551,6 +1572,12 @@ pre {
     padding: 0.75rem 0;
     border-bottom: 1px solid var(--line);
     color: var(--text);
+    transition: color 0.15s var(--transition);
+  }
+
+  .mobile-menu__link:hover,
+  .mobile-menu__link:focus-visible {
+    color: var(--accent);
   }
 
   .mobile-menu__actions {

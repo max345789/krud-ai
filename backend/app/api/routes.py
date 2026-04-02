@@ -52,6 +52,9 @@ from app.core.security import (
 from app.models.schemas import (
     AccountResponse,
     AccountUpdateRequest,
+    AuthLoginRequest,
+    AuthSignupRequest,
+    AuthTokenResponse,
     BillingCheckoutResponse,
     BillingOverviewResponse,
     BillingPortalResponse,

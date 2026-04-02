@@ -4,6 +4,7 @@ import {
   ArrowRight,
   CircleAlert,
   CircleCheckBig,
+  Loader2,
   LockKeyhole,
   TimerReset,
 } from 'lucide-react';
@@ -15,8 +16,16 @@ const API = import.meta.env.VITE_API_BASE_URL || 'https://api.dabcloud.in';
 function Countdown({ seconds }) {
   const minutes = Math.floor(seconds / 60).toString().padStart(2, '0');
   const remainder = (seconds % 60).toString().padStart(2, '0');
+  const urgent = seconds <= 60 && seconds > 0;
 
-  return <span className="inline-code">{minutes}:{remainder}</span>;
+  return (
+    <span
+      className="inline-code"
+      style={urgent ? { color: 'var(--warning, #f2c572)', borderColor: 'rgba(242,197,114,0.4)' } : undefined}
+    >
+      {minutes}:{remainder}
+    </span>
+  );
 }
 
 export default function CliAuth() {
@@ -30,16 +39,21 @@ export default function CliAuth() {
   const [timeLeft, setTimeLeft] = useState(600);
 
   useEffect(() => {
-    const id = window.setInterval(() => {
+    if (timeLeft === 0) return;
+    const id = window.setTimeout(() => {
       setTimeLeft((value) => Math.max(0, value - 1));
     }, 1000);
-
-    return () => window.clearInterval(id);
-  }, []);
+    return () => window.clearTimeout(id);
+  }, [timeLeft]);
 
   const expired = timeLeft === 0;
   const missingCode = !userCode;
   const blocked = expired || missingCode;
+
+  const handleRetry = () => {
+    setStatus('idle');
+    setErrMsg('');
+  };
 
   const errorMessage = useMemo(() => {
     if (missingCode) {
@@ -82,7 +96,7 @@ export default function CliAuth() {
       setStatus('error');
       setErrMsg('Invalid or expired code. Please run krud login again.');
     } catch {
-      setStatus('error');
+      setStatus('network-error');
       setErrMsg('Network error. Check your connection and try again.');
     }
   };
@@ -154,12 +168,22 @@ export default function CliAuth() {
             </div>
           ) : (
             <>
-              {(status === 'error' || blocked) ? (
+              {(status === 'error' || status === 'network-error' || blocked) ? (
                 <div className="auth-alert">
                   <p style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text)' }}>
                     <CircleAlert size={16} />
                     {errorMessage}
                   </p>
+                  {status === 'network-error' && (
+                    <button
+                      type="button"
+                      className="button button-secondary"
+                      style={{ marginTop: '0.6rem', width: '100%' }}
+                      onClick={handleRetry}
+                    >
+                      Try again
+                    </button>
+                  )}
                 </div>
               ) : null}
 
@@ -205,8 +229,17 @@ export default function CliAuth() {
                   style={{ width: '100%' }}
                   disabled={status === 'loading' || blocked}
                 >
-                  {status === 'loading' ? 'Approving…' : 'Approve device'}
-                  <ArrowRight size={15} />
+                  {status === 'loading' ? (
+                    <>
+                      <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      Approving…
+                    </>
+                  ) : (
+                    <>
+                      Approve device
+                      <ArrowRight size={15} />
+                    </>
+                  )}
                 </button>
               </form>
 
