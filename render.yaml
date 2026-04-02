@@ -36,6 +36,8 @@ services:
       # ── server ──────────────────────────────────────────────────────────────
       - key: KRUD_PUBLIC_BASE_URL
         value: https://api.dabcloud.in
+      - key: KRUD_DEVICE_BASE_URL
+        value: https://dabcloud.in
       - key: KRUD_FRONTEND_URL
         value: https://dabcloud.in
       - key: KRUD_ALLOWED_ORIGINS
@@ -46,10 +48,8 @@ services:
         value: "0.2.0"
 
       # ── billing (Razorpay) ──────────────────────────────────────────────────
-      # Set KRUD_BILLING_MODE=razorpay once your Razorpay keys are configured.
-      # Leave as "mock" during initial setup to avoid accidental charges.
       - key: KRUD_BILLING_MODE
-        value: mock
+        value: razorpay
 
       # RAZORPAY_KEY_ID      — from Razorpay dashboard: Settings → API Keys
       # RAZORPAY_KEY_SECRET  — keep as a secret, never commit

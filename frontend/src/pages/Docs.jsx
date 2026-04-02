@@ -38,7 +38,7 @@ export default function Docs() {
                 {section.label}
               </a>
             ))}
-            <div className="docs-note" style={{ marginTop: '1.2rem' }}>
+            <div className="docs-note docs-note--offset">
               <p>
                 Need the backend shape too? The control plane lives in the same product story.
               </p>
@@ -75,13 +75,14 @@ export default function Docs() {
               <h2>Approve access from the browser without leaving the terminal workflow.</h2>
               <p>
                 <span className="inline-code">krud login</span> starts the device-code flow.
-                The browser approval page only exists to confirm the session cleanly.
+                The browser page now asks the user to create an account or sign in first,
+                then approve the device in the same flow.
               </p>
               <CopyCommand command="krud login" label="Authentication" />
               <ul className="docs-steps">
-                <li>The browser lands on <span className="inline-code">/cli-auth</span> with the device code pre-filled.</li>
-                <li>The session token is stored locally after approval.</li>
-                <li>The pattern is good UX because it keeps credential handling out of copied text.</li>
+                <li>The browser lands on <span className="inline-code">/login</span> with the device code pre-filled.</li>
+                <li>New users create an account there; returning users sign in.</li>
+                <li>The CLI session token is stored locally only after authenticated approval finishes.</li>
               </ul>
             </Reveal>
 
@@ -163,9 +164,9 @@ export default function Docs() {
                 <div>KRUD_BILLING_MODE = <strong>"mock" | "dodo"</strong></div>
               </div>
               <ul className="docs-steps">
-                <li>Use the same host routing for <span className="inline-code">/cli-auth</span> and device approval pages.</li>
+                <li>Use the main-domain <span className="inline-code">/login</span> route for device approval pages.</li>
                 <li>Billing and release metadata can stay behind the same control plane.</li>
-                <li>The UI should always point back to this concrete product shape.</li>
+                <li>Legacy <span className="inline-code">/cli-auth</span> or <span className="inline-code">/device</span> paths can redirect into that same page.</li>
               </ul>
             </Reveal>
           </div>

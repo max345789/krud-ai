@@ -89,6 +89,9 @@ export default function Layout() {
           </nav>
 
           <div className="site-header__actions">
+            <NavLink to="/login" className="button button-secondary header-link-desktop">
+              Log in
+            </NavLink>
             <a
               className="button button-secondary header-link-desktop"
               href={REPO_URL}
@@ -98,8 +101,8 @@ export default function Layout() {
               GitHub
               <ArrowUpRight size={14} />
             </a>
-            <NavLink to="/billing" className="button button-primary header-primary">
-              Start plan
+            <NavLink to="/login" className="button button-primary header-primary">
+              Create account
             </NavLink>
             <button
               type="button"
@@ -136,11 +139,18 @@ export default function Layout() {
               </div>
               <div className="mobile-menu__actions">
                 <NavLink
-                  to="/billing"
+                  to="/login"
+                  className="button button-secondary"
+                  onClick={() => setMenuOpen(false)}
+                >
+                  Log in
+                </NavLink>
+                <NavLink
+                  to="/login"
                   className="button button-primary"
                   onClick={() => setMenuOpen(false)}
                 >
-                  Start plan
+                  Create account
                 </NavLink>
                 <a
                   className="button button-secondary"
@@ -165,12 +175,12 @@ export default function Layout() {
           <div className="site-footer__lead">
             <BrandMark />
             <p>
-              A calmer command line for people who ship, debug, and recover in the shell
-              more than they present slides about it.
+              Type the outcome. Review the plan. Keep the shell. Krud is a terminal
+              agent for people who need the command line to stay sharp under pressure.
             </p>
             <div className="site-footer__status">
               <span className="status-dot" />
-              <span>Mac-first CLI. Device auth. Billing returns. Background daemon.</span>
+              <span>CLI-first login. Human approval. Daemon queue. Global launch path.</span>
             </div>
           </div>
 
@@ -198,8 +208,8 @@ export default function Layout() {
           </div>
         </div>
         <div className="shell site-footer__bottom">
-          <p>© {new Date().getFullYear()} Krud AI. MIT licensed.</p>
-          <p>Type the outcome. Review the plan. Run with confidence.</p>
+          <p>© {new Date().getFullYear()} Krud AI.</p>
+          <p>Built for people who still solve real work in a terminal.</p>
         </div>
       </footer>
     </div>

@@ -134,18 +134,27 @@ class BillingService:
             "usage_events": self.db.count_usage_events(user["id"]),
         }
 
-    def create_checkout(self, user: dict) -> BillingSession:
+    def _plan_id_for(self, plan: str) -> str:
+        """Return the Razorpay plan_id for a given plan name."""
+        if plan == "pilot":
+            return settings.razorpay_plan_id_pilot
+        return settings.razorpay_plan_id_builder
+
+    def create_checkout(self, user: dict, plan: str = "builder") -> BillingSession:
         """
         Create a Razorpay subscription and return its hosted checkout URL.
 
-        The user's ID is stored in subscription notes so that the
-        subscription.activated webhook can resolve back to the correct DB row.
+        plan must be 'builder' or 'pilot'.  The plan name and user ID are
+        stored in subscription notes so that the subscription.activated
+        webhook can resolve back to the correct DB row and set the right plan.
         """
+        plan_id = self._plan_id_for(plan)
+
         if self._is_mock:
             return BillingSession(
                 url=(
                     f"{settings.public_base_url}/billing/mock-checkout"
-                    f"?email={user['email']}&plan={settings.razorpay_plan_id}"
+                    f"?email={user['email']}&plan={plan_id or plan}"
                 ),
                 mode="mock",
             )
@@ -153,13 +162,14 @@ class BillingService:
         client = self._require_client()
 
         subscription = client.subscription.create({
-            "plan_id": settings.razorpay_plan_id,
+            "plan_id": plan_id,
             "total_count": 120,   # 120 billing cycles (~10 years)
             "quantity": 1,
             "customer_notify": 1,
             "notes": {
                 "user_id": user["id"],
                 "email": user["email"],
+                "krud_plan": plan,
             },
         })
 

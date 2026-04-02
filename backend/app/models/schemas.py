@@ -130,6 +130,17 @@ class DeviceApprovalRequest(BaseModel):
         return v.strip() or None
 
 
+class DeviceAuthenticatedApprovalRequest(BaseModel):
+    model_config = _STRICT
+
+    user_code: str = Field(min_length=9, max_length=9)
+
+    @field_validator("user_code")
+    @classmethod
+    def _validate_user_code(cls, v: str) -> str:
+        return validate_user_code(v)
+
+
 class DevicePollRequest(BaseModel):
     """
     CLI polls this repeatedly until the device is approved or expires.
@@ -173,7 +184,7 @@ class AccountResponse(BaseModel):
 class SubscriptionResponse(BaseModel):
     status: SubscriptionStatus
     trial_ends_at: datetime
-    price_id: str  # Dodo Payments product ID (formerly Stripe price ID)
+    price_id: str  # Razorpay plan ID
     customer_id: str | None = None
     subscription_id: str | None = None
 
@@ -285,12 +296,12 @@ class BillingOverviewResponse(BaseModel):
 
 class BillingCheckoutResponse(BaseModel):
     checkout_url: str
-    mode: Literal["mock", "dodo"]
+    mode: Literal["mock", "razorpay"]
 
 
 class BillingPortalResponse(BaseModel):
     portal_url: str
-    mode: Literal["mock", "dodo"]
+    mode: Literal["mock", "razorpay"]
 
 
 class BillingWebhookResponse(BaseModel):
@@ -308,3 +319,48 @@ class ReleaseResponse(BaseModel):
     notes: str
     assets: dict[str, str]
     signature_asset: str
+
+
+# ── Org analyze ───────────────────────────────────────────────────────────────
+
+class OrgAnalyzeRequest(BaseModel):
+    """
+    Sent by the CLI before calling /v1/org/analyze.
+
+    files is a snapshot of top-level directory entries so the backend never
+    needs filesystem access.  stack_hints are marker filenames the CLI detected
+    (e.g. "package.json", "requirements.txt") to help the LLM skip discovery.
+    """
+    model_config = _STRICT
+
+    cwd: str = Field(max_length=512)
+    files: list[str] = Field(default_factory=list, max_length=200)
+    stack_hints: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("cwd")
+    @classmethod
+    def _validate_cwd(cls, v: str) -> str:
+        result = validate_cwd(v)
+        return result if result is not None else v
+
+    @field_validator("files", "stack_hints")
+    @classmethod
+    def _validate_no_nulls(cls, v: list[str]) -> list[str]:
+        for item in v:
+            validate_no_null_bytes(item)
+        return v
+
+
+class OrgAction(BaseModel):
+    action_type: Literal["command", "create_file", "create_dir"]
+    path: str | None = None
+    content: str | None = None
+    command: str | None = None
+    rationale: str
+    risk: Literal["low", "medium", "high"]
+
+
+class OrgAnalyzeResponse(BaseModel):
+    stack: str
+    summary: str
+    actions: list[OrgAction]

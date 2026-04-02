@@ -35,11 +35,17 @@ Security hardening applied here
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Request, status
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
-from app.core.auth import get_current_user
+from app.core.auth import (
+    extract_bearer_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from app.core.config import settings
 from app.core.db import Database
 from app.core.limiter import limiter, user_or_ip_key
@@ -66,11 +72,15 @@ from app.models.schemas import (
     ChatSessionResponse,
     ChatSessionSummary,
     CommandProposal,
+    DeviceAuthenticatedApprovalRequest,
     DeviceApprovalRequest,
     DevicePollRequest,
     DevicePollResponse,
     DeviceStartRequest,
     DeviceStartResponse,
+    OrgAnalyzeRequest,
+    OrgAnalyzeResponse,
+    OrgAction,
     ReleaseResponse,
     SubscriptionResponse,
     TokenBudget,
@@ -79,6 +89,7 @@ from app.models.schemas import (
 from app.core.token_budget import _window_start, check_budget
 from app.services.billing import BillingService
 from app.services.chat import build_chat_reply, derive_session_title
+from app.services.llm import generate_org_analysis
 from app.services.device_auth import build_device_page
 from app.services.pages import (
     render_billing_checkout_page,
@@ -89,6 +100,67 @@ from app.services.pages import (
 router = APIRouter()
 db = Database()
 billing = BillingService(db)
+
+
+def _request_origin(request: Request) -> str:
+    host = request.headers.get("host") or request.url.netloc
+    return f"{request.url.scheme}://{host}".rstrip("/")
+
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+
+@router.post("/v1/auth/signup", response_model=AuthTokenResponse, status_code=201)
+@limiter.limit("5/minute")
+def auth_signup(request: Request, payload: AuthSignupRequest) -> AuthTokenResponse:
+    try:
+        record = db.signup_with_password(
+            email=str(payload.email),
+            password_hash=hash_password(payload.password),
+            name=payload.name,
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with that email already exists",
+        )
+
+    return AuthTokenResponse(
+        token=record["token"],
+        email=record["email"],
+        name=record["name"],
+        subscription_status=record["subscription_status"],
+    )
+
+
+@router.post("/v1/auth/login", response_model=AuthTokenResponse)
+@limiter.limit("10/minute")
+def auth_login(request: Request, payload: AuthLoginRequest) -> AuthTokenResponse:
+    user = db.get_user_for_password_auth(str(payload.email))
+    if user is None or not verify_password(payload.password, user.get("password_hash")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        )
+
+    token = db.create_session_for_user(user["id"])
+    return AuthTokenResponse(
+        token=token,
+        email=user["email"],
+        name=user.get("name"),
+        subscription_status=user["subscription_status"],
+    )
+
+
+@router.post("/v1/auth/logout")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
+def auth_logout(
+    request: Request,
+    user=Depends(get_current_user),
+    authorization: str | None = Header(default=None),
+) -> dict[str, str]:
+    token = extract_bearer_token(authorization)
+    db.revoke_session_token(token)
+    return {"status": "logged_out", "user_id": user["id"]}
 
 
 # ── Device auth ───────────────────────────────────────────────────────────────
@@ -106,8 +178,8 @@ def device_start(request: Request, payload: DeviceStartRequest) -> DeviceStartRe
     return DeviceStartResponse(
         device_code=record["device_code"],
         user_code=record["user_code"],
-        verification_uri=f"{settings.device_base_url}/cli-auth",
-        verification_uri_complete=f"{settings.device_base_url}/cli-auth?user_code={record['user_code']}",
+        verification_uri=f"{settings.device_base_url}/login",
+        verification_uri_complete=f"{settings.device_base_url}/login?user_code={record['user_code']}",
         interval_seconds=settings.device_poll_interval_seconds,
         expires_in_seconds=settings.device_code_ttl_seconds,
     )
@@ -125,6 +197,11 @@ def device_page(request: Request, user_code: str | None = None) -> HTMLResponse:
     malformed values never reach template rendering.
     """
     safe_code = require_valid_user_code(user_code) if user_code else None
+    if _request_origin(request) != settings.device_base_url.rstrip("/"):
+        target = f"{settings.device_base_url.rstrip('/')}/login"
+        if safe_code:
+            target = f"{target}?user_code={quote(safe_code)}"
+        return RedirectResponse(url=target, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
     return HTMLResponse(build_device_page(user_code=safe_code))
 
 
@@ -184,6 +261,30 @@ def device_complete(
     return {"status": record["status"]}
 
 
+@router.post("/v1/device/approve-authenticated")
+@limiter.limit("30/minute", key_func=user_or_ip_key)
+def device_approve_authenticated(
+    request: Request,
+    payload: DeviceAuthenticatedApprovalRequest,
+    user=Depends(get_current_user),
+) -> dict[str, str]:
+    try:
+        record = db.complete_device_code_for_user(
+            user_code=payload.user_code,
+            user_id=user["id"],
+        )
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired device code",
+        )
+    return {
+        "status": record["status"],
+        "email": record["email"],
+        "name": record["name"] or "",
+    }
+
+
 @router.post("/v1/device/poll", response_model=DevicePollResponse)
 @limiter.limit("120/minute")
 def device_poll(request: Request, payload: DevicePollRequest) -> DevicePollResponse:
@@ -213,7 +314,7 @@ def device_poll(request: Request, payload: DevicePollRequest) -> DevicePollRespo
         subscription=SubscriptionResponse(
             status=result["subscription_status"],
             trial_ends_at=result["trial_ends_at"],
-            price_id=settings.dodo_product_id,
+            price_id=settings.razorpay_plan_id,
             customer_id=result.get("billing_customer_id"),
             subscription_id=result.get("billing_subscription_id"),
         ),
@@ -258,7 +359,7 @@ def account_subscription(
     return SubscriptionResponse(
         status=current.get("subscription_status", user["subscription_status"]),
         trial_ends_at=current.get("trial_ends_at", user["trial_ends_at"]),
-        price_id=settings.dodo_product_id,
+        price_id=settings.razorpay_plan_id,
         customer_id=current.get("billing_customer_id"),
         subscription_id=current.get("billing_subscription_id"),
     )
@@ -401,6 +502,10 @@ def billing_mock_checkout_submit(
             "Subscription Activated",
             f"{safe_email} is now marked as {safe_status}. "
             "Return to the terminal and continue using Krud AI.",
+            primary_label="Open billing portal",
+            primary_href=f"/billing/mock-portal?email={quote(safe_email)}",
+            secondary_label="Back to Krud AI",
+            secondary_href=settings.device_base_url,
         )
     )
 
@@ -435,6 +540,8 @@ def billing_success() -> HTMLResponse:
         render_simple_notice(
             "Billing Success",
             "Checkout completed. Return to the terminal and keep working.",
+            primary_label="Back to Krud AI",
+            primary_href=settings.device_base_url,
         )
     )
 
@@ -445,6 +552,8 @@ def billing_cancel() -> HTMLResponse:
         render_simple_notice(
             "Billing Canceled",
             "Checkout was canceled. You can return to the terminal or try again later.",
+            primary_label="Back to Krud AI",
+            primary_href=settings.device_base_url,
         )
     )
 
@@ -591,4 +700,44 @@ def latest_release(request: Request, channel: str = "stable") -> ReleaseResponse
             "linux-x86_64":   f"{base}/{tag}/krud-linux-x86_64.tar.gz",
         },
         signature_asset=f"{base}/{tag}/krud-checksums.txt",
+    )
+
+
+# ── Org analyze ───────────────────────────────────────────────────────────────
+
+@router.post("/v1/org/analyze", response_model=OrgAnalyzeResponse)
+@limiter.limit("10/minute", key_func=user_or_ip_key)
+def org_analyze(
+    request: Request,
+    payload: OrgAnalyzeRequest,
+    user=Depends(get_current_user),
+) -> OrgAnalyzeResponse:
+    """
+    Analyse a project snapshot and return hygiene recommendations.
+
+    The CLI sends the cwd, a list of top-level filenames, and detected stack
+    marker filenames.  The backend never touches the user's filesystem — all
+    analysis is done from this metadata snapshot.
+
+    Rate limit: 10/minute per user (STANDARD).
+    """
+    analysis = generate_org_analysis(
+        cwd=payload.cwd,
+        files=payload.files,
+        stack_hints=payload.stack_hints,
+    )
+    return OrgAnalyzeResponse(
+        stack=analysis.stack,
+        summary=analysis.summary,
+        actions=[
+            OrgAction(
+                action_type=a["action_type"],  # type: ignore[arg-type]
+                path=a.get("path"),
+                content=a.get("content"),
+                command=a.get("command"),
+                rationale=a["rationale"],
+                risk=a["risk"],  # type: ignore[arg-type]
+            )
+            for a in analysis.actions
+        ],
     )

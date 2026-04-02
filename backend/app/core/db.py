@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import sqlite3
@@ -140,6 +141,9 @@ class Database:
     def initialize(self) -> None:
         if not self._uses_sqlite:
             # PostgreSQL schema is managed via Supabase migrations.
+            self._ensure_password_hash_column()
+            self._ensure_plan_column()
+            self._ensure_auth_session_columns()
             return
 
         with self._lock, self.connect() as conn:
@@ -151,6 +155,7 @@ class Database:
                     name text,
                     password_hash text,
                     subscription_status text not null,
+                    plan text not null default 'free',
                     trial_ends_at text not null,
                     billing_customer_id text,
                     billing_subscription_id text,
@@ -174,6 +179,8 @@ class Database:
                     token text primary key,
                     user_id text not null,
                     created_at text not null,
+                    last_seen_at text,
+                    revoked_at text,
                     foreign key (user_id) references users(id) on delete cascade
                 );
 
@@ -217,6 +224,7 @@ class Database:
                 create index if not exists idx_users_billing_customer_id on users(billing_customer_id);
                 """
             )
+            self._ensure_auth_session_columns(conn=conn)
 
     def _now(self) -> datetime:
         return datetime.now(UTC)
@@ -228,14 +236,72 @@ class Database:
 
     def _ensure_password_hash_column(self) -> None:
         """Add password_hash column to existing SQLite DBs that predate this migration."""
-        if not self._uses_sqlite:
-            return
         with self._lock, self.connect() as conn:
             try:
-                conn.execute("alter table users add column password_hash text")
+                if self._uses_sqlite:
+                    conn.execute("alter table users add column password_hash text")
+                else:
+                    with conn.cursor() as cur:
+                        cur.execute("alter table users add column password_hash text")
                 conn.commit()
             except Exception:
                 pass  # Column already exists — normal for new DBs
+
+    def _ensure_plan_column(self) -> None:
+        """Add plan column to existing DBs that predate this migration."""
+        if not self._uses_sqlite:
+            with self._lock, self.connect() as conn:
+                try:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "alter table users add column plan text not null default 'free'"
+                        )
+                    conn.commit()
+                except Exception:
+                    pass
+            return
+        with self._lock, self.connect() as conn:
+            try:
+                conn.execute("alter table users add column plan text not null default 'free'")
+                conn.commit()
+            except Exception:
+                pass
+
+    def _ensure_auth_session_columns(self, conn: Connection | None = None) -> None:
+        """Add tracking columns needed for revocation and activity auditing."""
+        def _apply(connection: Connection) -> None:
+            try:
+                if self._uses_sqlite:
+                    connection.execute("alter table auth_sessions add column last_seen_at text")
+                else:
+                    with connection.cursor() as cur:
+                        cur.execute("alter table auth_sessions add column last_seen_at timestamptz")
+                connection.commit()
+            except Exception:
+                pass
+
+            try:
+                if self._uses_sqlite:
+                    connection.execute("alter table auth_sessions add column revoked_at text")
+                else:
+                    with connection.cursor() as cur:
+                        cur.execute("alter table auth_sessions add column revoked_at timestamptz")
+                connection.commit()
+            except Exception:
+                pass
+
+        if conn is not None:
+            _apply(conn)
+            return
+
+        with self._lock, self.connect() as connection:
+            _apply(connection)
+
+    def _hash_session_token(self, token: str) -> str:
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    def _generate_session_token(self) -> str:
+        return f"krud_{secrets.token_urlsafe(32)}"
 
     def signup_with_password(
         self, email: str, password_hash: str, name: str | None
@@ -264,16 +330,16 @@ class Database:
                 conn,
                 """
                 insert into users
-                    (id, email, name, password_hash, subscription_status,
+                    (id, email, name, password_hash, subscription_status, plan,
                      trial_ends_at, billing_customer_id, billing_subscription_id, created_at)
-                values (%s, %s, %s, %s, 'trialing', %s, null, null, %s)
+                values (%s, %s, %s, %s, 'trialing', 'free', %s, null, null, %s)
                 """,
                 (user_id, safe_email, name, password_hash, trial_ends_at, self._iso(now)),
                 sqlite_query="""
                 insert into users
-                    (id, email, name, password_hash, subscription_status,
+                    (id, email, name, password_hash, subscription_status, plan,
                      trial_ends_at, billing_customer_id, billing_subscription_id, created_at)
-                values (?, ?, ?, ?, 'trialing', ?, null, null, ?)
+                values (?, ?, ?, ?, 'trialing', 'free', ?, null, null, ?)
                 """,
                 sqlite_params=(user_id, safe_email, name, password_hash, trial_ends_at, self._iso(now)),
             )
@@ -308,13 +374,20 @@ class Database:
             return self._create_session_token(conn, user_id, now)
 
     def _create_session_token(self, conn, user_id: str, now: datetime) -> str:
-        token = f"krud_{secrets.token_urlsafe(24)}"
+        token = self._generate_session_token()
+        token_hash = self._hash_session_token(token)
         self._execute(
             conn,
-            "insert into auth_sessions (token, user_id, created_at) values (%s, %s, %s)",
-            (token, user_id, self._iso(now)),
-            sqlite_query="insert into auth_sessions (token, user_id, created_at) values (?, ?, ?)",
-            sqlite_params=(token, user_id, self._iso(now)),
+            """
+            insert into auth_sessions (token, user_id, created_at, last_seen_at, revoked_at)
+            values (%s, %s, %s, %s, null)
+            """,
+            (token_hash, user_id, self._iso(now), self._iso(now)),
+            sqlite_query="""
+            insert into auth_sessions (token, user_id, created_at, last_seen_at, revoked_at)
+            values (?, ?, ?, ?, null)
+            """,
+            sqlite_params=(token_hash, user_id, self._iso(now), self._iso(now)),
         )
         return token
 
@@ -387,15 +460,15 @@ class Database:
                 self._execute(
                     conn,
                     """
-                    insert into users (id, email, name, subscription_status, trial_ends_at,
+                    insert into users (id, email, name, subscription_status, plan, trial_ends_at,
                         billing_customer_id, billing_subscription_id, created_at)
-                    values (%s, %s, %s, 'trialing', %s, null, null, %s)
+                    values (%s, %s, %s, 'trialing', 'free', %s, null, null, %s)
                     """,
                     (user_id, safe_email, approval.name, trial_ends_at, self._iso(now)),
                     sqlite_query="""
-                    insert into users (id, email, name, subscription_status, trial_ends_at,
+                    insert into users (id, email, name, subscription_status, plan, trial_ends_at,
                         billing_customer_id, billing_subscription_id, created_at)
-                    values (?, ?, ?, 'trialing', ?, null, null, ?)
+                    values (?, ?, ?, 'trialing', 'free', ?, null, null, ?)
                     """,
                     sqlite_params=(user_id, safe_email, approval.name, trial_ends_at, self._iso(now)),
                 )
@@ -409,13 +482,20 @@ class Database:
                     trial_ends_at = trial_ends_at.isoformat()
                 name = user["name"]
 
-            session_token = f"krud_{secrets.token_urlsafe(24)}"
+            session_token = self._generate_session_token()
+            token_hash = self._hash_session_token(session_token)
             self._execute(
                 conn,
-                "insert into auth_sessions (token, user_id, created_at) values (%s, %s, %s)",
-                (session_token, user_id, self._iso(now)),
-                sqlite_query="insert into auth_sessions (token, user_id, created_at) values (?, ?, ?)",
-                sqlite_params=(session_token, user_id, self._iso(now)),
+                """
+                insert into auth_sessions (token, user_id, created_at, last_seen_at, revoked_at)
+                values (%s, %s, %s, %s, null)
+                """,
+                (token_hash, user_id, self._iso(now), self._iso(now)),
+                sqlite_query="""
+                insert into auth_sessions (token, user_id, created_at, last_seen_at, revoked_at)
+                values (?, ?, ?, ?, null)
+                """,
+                sqlite_params=(token_hash, user_id, self._iso(now), self._iso(now)),
             )
             self._execute(
                 conn,
@@ -438,6 +518,75 @@ class Database:
             "user_id": user_id,
             "subscription_status": subscription_status,
             "trial_ends_at": trial_ends_at if isinstance(trial_ends_at, str) else trial_ends_at.isoformat(),
+        }
+
+    def complete_device_code_for_user(self, user_code: str, user_id: str) -> dict[str, str]:
+        now = self._now()
+        with self._lock, self.connect() as conn:
+            record = self._fetchone(
+                conn,
+                "select * from device_codes where user_code = %s",
+                (user_code,),
+                sqlite_query="select * from device_codes where user_code = ?",
+                sqlite_params=(user_code,),
+                dict_row=True,
+            )
+            if record is None:
+                raise ValueError("Unknown user code")
+
+            expires_at = record["expires_at"]
+            if isinstance(expires_at, str):
+                expires_at = datetime.fromisoformat(expires_at)
+            if expires_at <= now:
+                self._execute(
+                    conn,
+                    "update device_codes set status = 'expired' where user_code = %s",
+                    (user_code,),
+                    sqlite_query="update device_codes set status = 'expired' where user_code = ?",
+                    sqlite_params=(user_code,),
+                )
+                raise ValueError("Device code has expired")
+
+            user = self._fetchone(
+                conn,
+                "select * from users where id = %s",
+                (user_id,),
+                sqlite_query="select * from users where id = ?",
+                sqlite_params=(user_id,),
+                dict_row=True,
+            )
+            if user is None:
+                raise ValueError("Unknown user")
+
+            trial_ends_at = user["trial_ends_at"]
+            if isinstance(trial_ends_at, datetime):
+                trial_ends_at = trial_ends_at.isoformat()
+
+            session_token = self._create_session_token(conn, user_id, now)
+            self._execute(
+                conn,
+                """
+                update device_codes
+                set status = 'approved', email = %s, name = %s, session_token = %s, user_id = %s
+                where user_code = %s
+                """,
+                (user["email"], user.get("name"), session_token, user_id, user_code),
+                sqlite_query="""
+                update device_codes
+                set status = 'approved', email = ?, name = ?, session_token = ?, user_id = ?
+                where user_code = ?
+                """,
+                sqlite_params=(user["email"], user.get("name"), session_token, user_id, user_code),
+            )
+
+        return {
+            "status": "approved",
+            "session_token": session_token,
+            "user_id": user_id,
+            "subscription_status": user["subscription_status"],
+            "trial_ends_at": trial_ends_at,
+            "email": user["email"],
+            "name": user.get("name"),
         }
 
     def poll_device_code(self, device_code: str) -> dict[str, str | None]:
@@ -484,23 +633,30 @@ class Database:
         }
 
     def get_user_by_session_token(self, token: str) -> dict[str, str] | None:
+        token_hash = self._hash_session_token(token)
         with self.connect() as conn:
             record = self._fetchone(
                 conn,
                 """
-                select users.*, auth_sessions.created_at as session_created_at
+                select users.*, auth_sessions.created_at as session_created_at,
+                       auth_sessions.last_seen_at as session_last_seen_at,
+                       auth_sessions.revoked_at as session_revoked_at
                 from auth_sessions
                 join users on users.id = auth_sessions.user_id
-                where auth_sessions.token = %s
+                where (auth_sessions.token = %s or auth_sessions.token = %s)
+                  and auth_sessions.revoked_at is null
                 """,
-                (token,),
+                (token_hash, token),
                 sqlite_query="""
-                select users.*, auth_sessions.created_at as session_created_at
+                select users.*, auth_sessions.created_at as session_created_at,
+                       auth_sessions.last_seen_at as session_last_seen_at,
+                       auth_sessions.revoked_at as session_revoked_at
                 from auth_sessions
                 join users on users.id = auth_sessions.user_id
-                where auth_sessions.token = ?
+                where (auth_sessions.token = ? or auth_sessions.token = ?)
+                  and auth_sessions.revoked_at is null
                 """,
-                sqlite_params=(token,),
+                sqlite_params=(token_hash, token),
                 dict_row=True,
             )
         if not record:
@@ -516,9 +672,51 @@ class Database:
             if not created.tzinfo:
                 created = created.replace(tzinfo=UTC)
             if self._now() > created + timedelta(days=settings.session_ttl_days):
+                self.revoke_session_token(token)
                 return None
+        self.touch_session_token(token)
         record["usage_events"] = self.count_usage_events(record["id"])
         return record
+
+    def touch_session_token(self, token: str) -> None:
+        now = self._iso(self._now())
+        token_hash = self._hash_session_token(token)
+        with self._lock, self.connect() as conn:
+            self._execute(
+                conn,
+                """
+                update auth_sessions
+                set last_seen_at = %s
+                where (token = %s or token = %s) and revoked_at is null
+                """,
+                (now, token_hash, token),
+                sqlite_query="""
+                update auth_sessions
+                set last_seen_at = ?
+                where (token = ? or token = ?) and revoked_at is null
+                """,
+                sqlite_params=(now, token_hash, token),
+            )
+
+    def revoke_session_token(self, token: str) -> None:
+        now = self._iso(self._now())
+        token_hash = self._hash_session_token(token)
+        with self._lock, self.connect() as conn:
+            self._execute(
+                conn,
+                """
+                update auth_sessions
+                set revoked_at = %s
+                where token = %s or token = %s
+                """,
+                (now, token_hash, token),
+                sqlite_query="""
+                update auth_sessions
+                set revoked_at = ?
+                where token = ? or token = ?
+                """,
+                sqlite_params=(now, token_hash, token),
+            )
 
     def update_user_name(self, user_id: str, name: str) -> None:
         with self._lock, self.connect() as conn:
@@ -801,6 +999,7 @@ class Database:
         user_id: str | None = None,
         email: str | None = None,
         status_value: str,
+        plan: str | None = None,
         customer_id: str | None = None,
         subscription_id: str | None = None,
     ) -> dict[str, str]:
@@ -814,19 +1013,21 @@ class Database:
                     """
                     update users
                     set subscription_status = %s,
+                        plan = coalesce(%s, plan),
                         billing_customer_id = coalesce(%s, billing_customer_id),
                         billing_subscription_id = coalesce(%s, billing_subscription_id)
                     where id = %s
                     """,
-                    (status_value, customer_id, subscription_id, user_id),
+                    (status_value, plan, customer_id, subscription_id, user_id),
                     sqlite_query="""
                     update users
                     set subscription_status = ?,
+                        plan = coalesce(?, plan),
                         billing_customer_id = coalesce(?, billing_customer_id),
                         billing_subscription_id = coalesce(?, billing_subscription_id)
                     where id = ?
                     """,
-                    sqlite_params=(status_value, customer_id, subscription_id, user_id),
+                    sqlite_params=(status_value, plan, customer_id, subscription_id, user_id),
                 )
                 row = self._fetchone(
                     conn,
@@ -842,19 +1043,21 @@ class Database:
                     """
                     update users
                     set subscription_status = %s,
+                        plan = coalesce(%s, plan),
                         billing_customer_id = coalesce(%s, billing_customer_id),
                         billing_subscription_id = coalesce(%s, billing_subscription_id)
                     where email = %s
                     """,
-                    (status_value, customer_id, subscription_id, email),
+                    (status_value, plan, customer_id, subscription_id, email),
                     sqlite_query="""
                     update users
                     set subscription_status = ?,
+                        plan = coalesce(?, plan),
                         billing_customer_id = coalesce(?, billing_customer_id),
                         billing_subscription_id = coalesce(?, billing_subscription_id)
                     where email = ?
                     """,
-                    sqlite_params=(status_value, customer_id, subscription_id, email),
+                    sqlite_params=(status_value, plan, customer_id, subscription_id, email),
                 )
                 row = self._fetchone(
                     conn,

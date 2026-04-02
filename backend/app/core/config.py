@@ -84,14 +84,21 @@ class Settings:
     billing_mode: str = os.getenv("KRUD_BILLING_MODE", "mock")
 
     # Razorpay — set as secrets in Render / environment; never hard-coded.
-    # RAZORPAY_KEY_ID      : Key ID from Razorpay dashboard (Settings → API Keys)
-    # RAZORPAY_KEY_SECRET  : Key Secret (keep in Render secret env var)
-    # RAZORPAY_WEBHOOK_SECRET : Webhook secret for HMAC-SHA256 signature verification
-    # RAZORPAY_PLAN_ID     : Subscription plan ID from Razorpay dashboard
+    # RAZORPAY_KEY_ID          : Key ID from Razorpay dashboard (Settings → API Keys)
+    # RAZORPAY_KEY_SECRET      : Key Secret (keep in Render secret env var)
+    # RAZORPAY_WEBHOOK_SECRET  : Webhook secret for HMAC-SHA256 signature verification
+    # RAZORPAY_PLAN_ID_BUILDER : Subscription plan ID for Builder plan ($12/month)
+    # RAZORPAY_PLAN_ID_PILOT   : Subscription plan ID for Pilot plan ($19/month)
     razorpay_key_id: str | None = os.getenv("RAZORPAY_KEY_ID")
     razorpay_key_secret: str | None = os.getenv("RAZORPAY_KEY_SECRET")
     razorpay_webhook_secret: str | None = os.getenv("RAZORPAY_WEBHOOK_SECRET")
-    razorpay_plan_id: str = os.getenv("RAZORPAY_PLAN_ID", "")
+    razorpay_plan_id_builder: str = os.getenv("RAZORPAY_PLAN_ID_BUILDER", "")
+    razorpay_plan_id_pilot: str = os.getenv("RAZORPAY_PLAN_ID_PILOT", "")
+
+    # ── token budget per plan ─────────────────────────────────────────────────
+    # Free    :  40,000 tokens / 5 h  (also used for trialing / past_due)
+    # Builder : 500,000 tokens / 5 h  ($12/month)
+    # Pilot   : 2,000,000 tokens / 5 h ($19/month)
 
     billing_success_url: str = os.getenv(
         "KRUD_BILLING_SUCCESS_URL", "http://127.0.0.1:8000/billing/success"
@@ -144,8 +151,27 @@ class Settings:
     # The window is a rolling 5-hour period, matching Claude Code's behaviour.
     # Limits are per-user; trial users get a tighter cap to control API spend.
     token_budget_window_hours: int = int(os.getenv("KRUD_TOKEN_BUDGET_WINDOW_HOURS", "5"))
-    token_budget_trial: int = int(os.getenv("KRUD_TOKEN_BUDGET_TRIAL", "40000"))
-    token_budget_active: int = int(os.getenv("KRUD_TOKEN_BUDGET_ACTIVE", "2000000"))
+    token_budget_free: int = int(os.getenv("KRUD_TOKEN_BUDGET_FREE", "40000"))
+    token_budget_builder: int = int(os.getenv("KRUD_TOKEN_BUDGET_BUILDER", "500000"))
+    token_budget_pilot: int = int(os.getenv("KRUD_TOKEN_BUDGET_PILOT", "2000000"))
+    # Legacy alias — used by existing code paths that pre-date plans
+    @property
+    def token_budget_trial(self) -> int:
+        return self.token_budget_free
+
+    @property
+    def token_budget_active(self) -> int:
+        return self.token_budget_pilot
+
+    @property
+    def razorpay_plan_id(self) -> str:
+        """
+        Default self-serve plan identifier for billing overview responses.
+
+        Prefer Builder as the entry plan and fall back to Pilot if Builder is
+        not configured in the current environment.
+        """
+        return self.razorpay_plan_id_builder or self.razorpay_plan_id_pilot
 
     @property
     def allowed_origins(self) -> list[str]:

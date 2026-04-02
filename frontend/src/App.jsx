@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, useLocation } from 'react-router-dom';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Pricing from './pages/Pricing';
@@ -12,7 +12,6 @@ import Billing from './pages/Billing';
 import Contact from './pages/Contact';
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
-import CliAuth from './pages/CliAuth';
 import PaymentSuccess from './pages/PaymentSuccess';
 import NotFound from './pages/NotFound';
 
@@ -39,12 +38,18 @@ function RouteEffects() {
   return null;
 }
 
+function LegacyAuthRoute() {
+  const location = useLocation();
+  return <Navigate to={`/login${location.search}`} replace />;
+}
+
 function App() {
   return (
     <>
       <RouteEffects />
       <Routes>
-        <Route path="/cli-auth" element={<CliAuth />} />
+        <Route path="/cli-auth" element={<LegacyAuthRoute />} />
+        <Route path="/device" element={<LegacyAuthRoute />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/pricing" element={<Pricing />} />

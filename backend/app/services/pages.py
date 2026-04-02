@@ -1,162 +1,170 @@
 from __future__ import annotations
 
+from app.services.browser_ui import (
+    DOCS_URL,
+    MARKETING_URL,
+    action_link_html,
+    detail_item_html,
+    render_browser_document,
+    safe_text,
+    status_pill_html,
+    terminal_preview_html,
+)
+
 
 def render_billing_checkout_page(email: str, plan: str) -> str:
-    return f"""
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Krud AI Mock Checkout</title>
-        <style>
-          body {{
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: linear-gradient(135deg, #f4efe6, #f7f4ec);
-            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            color: #1d1c1a;
-          }}
-          main {{
-            width: min(560px, calc(100vw - 32px));
-            background: white;
-            border: 1px solid #e4d8c7;
-            border-radius: 20px;
-            padding: 28px;
-            box-shadow: 0 18px 60px rgba(29, 28, 26, 0.08);
-          }}
-          h1 {{ margin-top: 0; }}
-          p {{ line-height: 1.6; color: #655f58; }}
-          form {{ margin-top: 20px; display: grid; gap: 12px; }}
-          input {{
-            padding: 12px 14px;
-            border: 1px solid #d9c8b2;
-            border-radius: 12px;
-            font: inherit;
-          }}
-          button {{
-            border: 0;
-            border-radius: 999px;
-            padding: 12px 18px;
-            background: #b6512f;
-            color: white;
-            font: inherit;
-            font-weight: 700;
-            cursor: pointer;
-          }}
-          .muted {{ font-size: 0.95rem; }}
-        </style>
-      </head>
-      <body>
-        <main>
-          <h1>Mock Checkout</h1>
-          <p>This local MVP page simulates a successful Krud AI subscription checkout.</p>
-          <p class="muted">Email: <strong>{email}</strong><br />Plan: <strong>{plan}</strong></p>
-          <form method="post" action="/billing/mock-checkout">
-            <input type="hidden" name="email" value="{email}" />
-            <input type="hidden" name="status" value="active" />
-            <button type="submit">Activate Subscription</button>
-          </form>
-        </main>
-      </body>
-    </html>
+    intro = f"""
+    <section class="intro">
+      <p class="eyebrow">Billing preview</p>
+      <h1 class="hero-title">Activate this Krud plan.</h1>
+      <p class="hero-copy">
+        This local checkout screen simulates a successful subscription so you can
+        verify the billing flow end to end before connecting live payments.
+      </p>
+      <div class="detail-list">
+        {detail_item_html("Account", email)}
+        {detail_item_html("Plan", plan)}
+        {detail_item_html("Mode", "Mock billing only. No real charge is created.")}
+      </div>
+      {terminal_preview_html([
+          "$ krud login",
+          "Open browser checkout",
+          "Activate subscription",
+          "Return to terminal and continue",
+      ])}
+    </section>
     """
+
+    panel = f"""
+    <section class="panel" aria-labelledby="checkout-title">
+      <p class="panel-kicker">Mock checkout</p>
+      <h2 class="panel-title" id="checkout-title">Confirm activation.</h2>
+      <p class="panel-copy">
+        When you submit this form, the local account is marked active and the
+        CLI billing gate will treat the subscription as paid.
+      </p>
+      <div class="stack">
+        {status_pill_html(plan or "builder", "default")}
+        <div class="field">
+          <span class="field-label">Email</span>
+          <input class="input" value="{safe_text(email)}" readonly />
+        </div>
+      </div>
+      <form method="post" action="/billing/mock-checkout" class="stack">
+        <input type="hidden" name="email" value="{safe_text(email)}" />
+        <input type="hidden" name="status" value="active" />
+        <button class="btn btn-primary" type="submit">Activate subscription</button>
+      </form>
+      <p class="helper">
+        This is only for local MVP validation. In production, checkout should
+        be initiated from the real billing API.
+      </p>
+    </section>
+    """
+
+    body_html = f'<main class="shell shell--split">{intro}{panel}</main>'
+    return render_browser_document(
+        "Krud AI Billing Checkout",
+        body_html,
+        footer_copy="Mock billing mirrors the production path without creating a real charge.",
+    )
 
 
 def render_billing_portal_page(email: str, status: str) -> str:
-    return f"""
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>Krud AI Mock Portal</title>
-        <style>
-          body {{
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #f6f2ea;
-            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            color: #1d1c1a;
-          }}
-          main {{
-            width: min(560px, calc(100vw - 32px));
-            background: white;
-            border: 1px solid #e4d8c7;
-            border-radius: 20px;
-            padding: 28px;
-            box-shadow: 0 18px 60px rgba(29, 28, 26, 0.08);
-          }}
-          form {{ display: inline-block; margin-right: 12px; margin-top: 16px; }}
-          button {{
-            border: 0;
-            border-radius: 999px;
-            padding: 12px 18px;
-            background: #1d1c1a;
-            color: white;
-            font: inherit;
-            cursor: pointer;
-          }}
-          .secondary {{ background: #8a857e; }}
-        </style>
-      </head>
-      <body>
-        <main>
-          <h1>Mock Billing Portal</h1>
-          <p>Email: <strong>{email}</strong></p>
-          <p>Subscription status: <strong>{status}</strong></p>
-          <form method="post" action="/billing/mock-portal">
-            <input type="hidden" name="email" value="{email}" />
-            <input type="hidden" name="status" value="active" />
-            <button type="submit">Set Active</button>
-          </form>
-          <form method="post" action="/billing/mock-portal">
-            <input type="hidden" name="email" value="{email}" />
-            <input type="hidden" name="status" value="canceled" />
-            <button class="secondary" type="submit">Set Canceled</button>
-          </form>
-        </main>
-      </body>
-    </html>
+    intro = f"""
+    <section class="intro">
+      <p class="eyebrow">Billing control</p>
+      <h1 class="hero-title">Manage subscription state.</h1>
+      <p class="hero-copy">
+        This local control page lets you simulate lifecycle changes so the CLI,
+        account API, and gating logic can be tested against real status flips.
+      </p>
+      <div class="detail-list">
+        {detail_item_html("Current account", email)}
+        {detail_item_html("Current status", status)}
+        {detail_item_html("Purpose", "Test the billing transitions before going live.")}
+      </div>
+      {terminal_preview_html([
+          "Subscription state sync",
+          f"status → {status}",
+          "CLI checks account access",
+          "Billing gates update immediately",
+      ])}
+    </section>
     """
 
+    actions = []
+    for next_status, label, tone in (
+        ("active", "Set active", "success"),
+        ("past_due", "Set past due", "default"),
+        ("canceled", "Set canceled", "danger"),
+    ):
+        button_class = "btn-primary" if next_status == "active" else "btn-secondary"
+        actions.append(
+            f"""
+            <form method="post" action="/billing/mock-portal">
+              <input type="hidden" name="email" value="{safe_text(email)}" />
+              <input type="hidden" name="status" value="{safe_text(next_status)}" />
+              <button class="btn {button_class}" type="submit">{safe_text(label)}</button>
+            </form>
+            """
+        )
 
-def render_simple_notice(title: str, body: str) -> str:
-    return f"""
-    <!doctype html>
-    <html lang="en">
-      <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>{title}</title>
-        <style>
-          body {{
-            margin: 0;
-            min-height: 100vh;
-            display: grid;
-            place-items: center;
-            background: #f5f0e6;
-            font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            color: #1d1c1a;
-          }}
-          main {{
-            width: min(560px, calc(100vw - 32px));
-            background: white;
-            border: 1px solid #e4d8c7;
-            border-radius: 20px;
-            padding: 28px;
-          }}
-        </style>
-      </head>
-      <body>
-        <main>
-          <h1>{title}</h1>
-          <p>{body}</p>
-        </main>
-      </body>
-    </html>
+    panel = f"""
+    <section class="panel" aria-labelledby="portal-title">
+      <p class="panel-kicker">Mock portal</p>
+      <h2 class="panel-title" id="portal-title">Billing state for this account.</h2>
+      <p class="panel-copy">
+        Use one of the actions below to change the stored subscription state and
+        immediately verify how Krud responds.
+      </p>
+      <div class="stack">
+        {status_pill_html(status, "success" if status == "active" else "danger" if status == "canceled" else "default")}
+        <div class="field">
+          <span class="field-label">Account</span>
+          <input class="input" value="{safe_text(email)}" readonly />
+        </div>
+      </div>
+      <div class="button-row">
+        {''.join(actions)}
+      </div>
+      <p class="helper">
+        These controls only affect the local MVP environment.
+      </p>
+    </section>
     """
+
+    body_html = f'<main class="shell shell--split">{intro}{panel}</main>'
+    return render_browser_document(
+        "Krud AI Billing Portal",
+        body_html,
+        footer_copy="Switch states here to verify billing behavior before going live.",
+    )
+
+
+def render_simple_notice(
+    title: str,
+    body: str,
+    *,
+    primary_label: str = "Back to Krud AI",
+    primary_href: str = MARKETING_URL,
+    secondary_label: str | None = "Read docs",
+    secondary_href: str | None = DOCS_URL,
+) -> str:
+    actions = [action_link_html(primary_label, primary_href, "primary")]
+    if secondary_label and secondary_href:
+        actions.append(action_link_html(secondary_label, secondary_href, "secondary"))
+
+    body_html = f"""
+    <main class="shell shell--notice">
+      <section class="panel notice-panel" aria-labelledby="notice-title">
+        <p class="panel-kicker">Krud AI</p>
+        <h1 class="panel-title" id="notice-title">{safe_text(title)}</h1>
+        <p class="notice-copy">{safe_text(body)}</p>
+        <div class="button-row">
+          {''.join(actions)}
+        </div>
+      </section>
+    </main>
+    """
+    return render_browser_document(title, body_html)

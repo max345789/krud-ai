@@ -30,11 +30,16 @@ from fastapi import HTTPException, status
 from app.core.config import settings
 
 
-def _limit_for(subscription_status: str) -> int:
+def _limit_for(subscription_status: str, plan: str = "free") -> int:
     if subscription_status == "active":
-        return settings.token_budget_active
-    # trialing, past_due, or anything unexpected → restricted budget
-    return settings.token_budget_trial
+        if plan == "pilot":
+            return settings.token_budget_pilot
+        if plan == "builder":
+            return settings.token_budget_builder
+        # free plan active users get the free budget
+        return settings.token_budget_free
+    # trialing, past_due, or anything unexpected → restricted (free) budget
+    return settings.token_budget_free
 
 
 def _window_start(now: datetime) -> datetime:
@@ -93,7 +98,7 @@ def check_budget(
       }
     """
     now = datetime.now(UTC)
-    limit = _limit_for(user["subscription_status"])
+    limit = _limit_for(user["subscription_status"], user.get("plan", "free"))
     headers = get_budget_headers(used, limit, oldest_event_at, now)
 
     if used >= limit:
