@@ -1,46 +1,46 @@
 import React from 'react';
 import {
   ArrowRight,
-  Command,
+  FolderKanban,
+  GitBranch,
   LockKeyhole,
+  MessageSquareCode,
   ReceiptText,
-  ScanSearch,
   Server,
-  Waypoints,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { CommandWindow, PageIntro, Reveal, SectionHeading } from '../components/ui';
 
 const capabilities = [
   {
-    icon: <Command size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
+    icon: <FolderKanban size={16} className="feature-ledger__icon" />,
+    title: 'Project hygiene — krud org',
+    text: 'Run krud org in any directory. Krud detects your stack, finds missing structure, and proposes .gitignore, README, and folder scaffolding. Each action is previewed before you approve.',
+  },
+  {
+    icon: <GitBranch size={16} className="feature-ledger__icon" />,
+    title: 'Node.js + Python stack awareness',
+    text: 'Krud detects package.json, requirements.txt, pyproject.toml, Cargo.toml and more. Every proposal is tailored to your actual stack — not a generic template.',
+  },
+  {
+    icon: <MessageSquareCode size={16} className="feature-ledger__icon" />,
     title: 'Natural-language command proposals',
-    text: 'Describe the outcome in product language. Krud turns it into shell work without asking you to translate the request first.',
+    text: 'Describe the outcome in plain language. Krud returns a reviewable command plan with rationale and risk level attached so you know exactly what will happen before it runs.',
   },
   {
-    icon: <ScanSearch size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
-    title: 'Readable output summaries',
-    text: 'After execution, the assistant reads the result and gives the next useful interpretation instead of stopping at stdout.',
+    icon: <LockKeyhole size={16} className="feature-ledger__icon" />,
+    title: 'Approval-gated execution',
+    text: 'Nothing runs silently. Every proposal pauses for your decision — run now, queue for the daemon, or skip. Destructive commands are flagged as high risk.',
   },
   {
-    icon: <LockKeyhole size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
-    title: 'Risk-aware approvals',
-    text: 'Potentially destructive actions stay reviewable. Approval is a first-class part of the experience, not an afterthought.',
+    icon: <Server size={16} className="feature-ledger__icon" />,
+    title: 'Background daemon for long jobs',
+    text: 'Queue tasks to the local daemon and keep your foreground shell free. Results are captured and readable when you come back.',
   },
   {
-    icon: <Waypoints size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
-    title: 'Queued background execution',
-    text: 'Foreground work can move into the daemon queue when the task should continue after the prompt disappears.',
-  },
-  {
-    icon: <Server size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
-    title: 'Account, billing, and release control plane',
-    text: 'The backend already exposes device auth, subscription checks, release metadata, and chat session orchestration.',
-  },
-  {
-    icon: <ReceiptText size={16} style={{ marginRight: '0.5rem', verticalAlign: 'text-bottom' }} />,
-    title: 'Persistent operator trail',
-    text: 'Sessions, token usage, and command history stay attached so the next interaction starts with context instead of guesswork.',
+    icon: <ReceiptText size={16} className="feature-ledger__icon" />,
+    title: 'Persistent session memory',
+    text: 'Sessions and command history stay attached so the next question starts with context. No blank-slate restarts mid-problem.',
   },
 ];
 
@@ -48,15 +48,14 @@ export default function Features() {
   return (
     <>
       <PageIntro
-        eyebrow="Capabilities"
-        title="Everything the product does to keep operators calm under pressure."
-        description="Krud is not trying to replace the shell. It is trying to make the shell feel steadier: clearer plans, safer approvals, stronger memory, and a control plane that backs the story up."
+        eyebrow="Features"
+        title="Built for the indie dev who lives in a terminal."
+        description="Krud owns two moments in your workflow: cleaning up a project before you start (krud org) and moving fast when you're deep in a problem (krud chat). Everything else supports those two moments."
         aside={
           <div className="meta-panel">
             <p>
-              The product already spans a Rust CLI, a background daemon, and a FastAPI
-              control plane. The public site should feel like those pieces belong to the
-              same instrument.
+              Designed for solo builders on Node.js and Python — the indie dev sweet spot.
+              No team features gate the core workflow. No enterprise overhead.
             </p>
           </div>
         }
@@ -68,7 +67,7 @@ export default function Features() {
             {capabilities.map(({ icon, title, text }, index) => (
               <Reveal key={title} delay={index * 0.06} className="feature-ledger__item">
                 <span className="feature-ledger__index">0{index + 1}</span>
-                <strong>
+                <strong className="feature-ledger__title">
                   {icon}
                   {title}
                 </strong>
@@ -83,27 +82,29 @@ export default function Features() {
         <div className="shell split-section">
           <Reveal>
             <SectionHeading
-              eyebrow="Context aware"
-              title="Describe it once. Let the product carry the syntax."
-              description="The site should communicate the operational value clearly: Krud absorbs shell recall so the operator can stay focused on the result."
+              eyebrow="krud org"
+              title="The command nobody else built."
+              description="Every competitor activates when you're already writing code. krud org activates when you're starting a project, cleaning up a repo, or coming back to a side project after three months of chaos."
             />
             <ul className="detail-list">
-              <li>Shell-aware command planning keeps the operator out of documentation rabbit holes.</li>
-              <li>Device-code auth makes terminal sign-in feel native instead of bolted on.</li>
-              <li>The surface stays text-first, with just enough structure to orient the next action.</li>
+              <li>Runs without a chat session — lower friction than any competitor.</li>
+              <li>Generates stack-specific .gitignore files with OS, editor, and dependency ignores.</li>
+              <li>Scaffolds README.md with placeholder sections so you start with a front door.</li>
+              <li>Proposes missing standard directories (src/, tests/) when clearly absent.</li>
             </ul>
           </Reveal>
 
           <Reveal delay={0.1}>
             <CommandWindow
-              title="planning example"
-              label="translation"
+              title="krud org — Node.js project"
+              label="hygiene scan"
               lines={[
-                { kind: 'prompt', text: 'compress the logs folder and upload it to S3' },
-                { kind: 'agent', text: 'Generating a shell-safe archive command and upload step...' },
-                { kind: 'output', text: 'tar -czf logs.tar.gz ./logs && aws s3 cp logs.tar.gz s3://bucket/logs/' },
-                { kind: 'success', text: 'Ready for approval and execution.' },
+                { kind: 'command', text: 'krud org' },
+                { kind: 'agent', text: 'Stack: Node.js. Scanning top-level structure...' },
+                { kind: 'output', text: 'Missing: .gitignore, README.md' },
+                { kind: 'success', text: 'Write .gitignore? [y/N]: y  →  Created (node_modules/, .env, dist/)' },
               ]}
+              footer="Stack detected. File previewed. Written on approval."
             />
           </Reveal>
         </div>
@@ -113,26 +114,26 @@ export default function Features() {
         <div className="shell split-section is-reverse">
           <Reveal>
             <SectionHeading
-              eyebrow="Readable receipts"
-              title="The result comes back in product language."
-              description="People do not need another raw-terminal wrapper. They need a trustworthy explanation of what happened and what to do next."
+              eyebrow="krud chat"
+              title="Plain language. Reviewable plan. Your decision."
+              description="When you're deep in a problem, you don't want to reconstruct the exact command from memory. Describe the outcome — Krud gives you a plan you can approve, queue, or skip."
             />
             <ul className="detail-list">
-              <li>Outputs are summarized so the next step is obvious.</li>
-              <li>Errors become diagnosis, not just logs.</li>
-              <li>Session history means the agent can continue from the last operational state.</li>
+              <li>Risk levels (low / medium / high) attached to every proposal.</li>
+              <li>Inspection-first — safe read commands proposed before write commands.</li>
+              <li>Errors become diagnosis, not just raw logs.</li>
             </ul>
           </Reveal>
 
           <Reveal delay={0.1}>
             <CommandWindow
-              title="analysis example"
-              label="receipt"
+              title="krud chat"
+              label="command plan"
               lines={[
-                { kind: 'prompt', text: 'why is nginx returning 502?' },
-                { kind: 'agent', text: 'Checking upstream health and the recent error log...' },
-                { kind: 'output', text: 'upstream connect() failed (111: Connection refused)' },
-                { kind: 'success', text: 'The backend on :3000 is down. Restart it to clear the 502.' },
+                { kind: 'prompt', text: 'why is my Python script running out of memory' },
+                { kind: 'agent', text: 'Checking process memory and any obvious leaks in the code path...' },
+                { kind: 'output', text: 'ps aux | grep python && tracemalloc snapshot' },
+                { kind: 'success', text: 'Risk: low. Approve to run, queue, or skip.' },
               ]}
               footer="The explanation is the product. The shell output is just evidence."
             />
@@ -144,17 +145,17 @@ export default function Features() {
         <div className="shell">
           <Reveal className="cta-band">
             <SectionHeading
-              eyebrow="Next step"
-              title="Read the flow, then give it a real problem."
-              description="The best feature proof is still firsthand use: install, log in, and ask for something that normally costs you ten minutes of shell recall."
+              eyebrow="Try it"
+              title="Install, run krud org on a real project, and see what it finds."
+              description="Five minutes is enough to know whether Krud belongs in your daily workflow. No configuration. No team setup. Just you and the terminal."
             />
             <div className="cta-band__actions">
               <Link to="/docs" className="button button-primary">
-                Installation and docs
+                Installation guide
                 <ArrowRight size={15} />
               </Link>
-              <Link to="/billing" className="button button-secondary">
-                Billing and plans
+              <Link to="/pricing" className="button button-secondary">
+                See plans
               </Link>
             </div>
           </Reveal>

@@ -17,8 +17,7 @@ use krud_core::{
     api_base_url, append_local_message, copy_file_if_exists, delete_session_token, init_local_db,
     read_session_token, recent_tasks, store_session_token, task_counts, upsert_local_session,
     AccountResponse, AppPaths, AuthTokenResponse, ChatReply, CommandProposal, DevicePollResponse,
-    DeviceStartResponse,
-    IpcRequest, IpcResponse, SERVICE_NAME,
+    DeviceStartResponse, IpcRequest, IpcResponse, OrgAnalyzeResponse, SERVICE_NAME,
 };
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION};
 use tokio::time::sleep;
@@ -39,6 +38,8 @@ enum Commands {
     Run(RunArgs),
     Update,
     Daemon(DaemonCommand),
+    /// Analyse project structure and suggest hygiene improvements
+    Org,
 }
 
 #[derive(Args)]
@@ -106,7 +107,7 @@ async fn main() -> Result<()> {
     // the login flow before continuing.
     let needs_auth = matches!(
         command,
-        Commands::Chat(_) | Commands::Status | Commands::Run(_)
+        Commands::Chat(_) | Commands::Status | Commands::Run(_) | Commands::Org
     );
     if needs_auth && read_session_token()?.is_none() {
         login().await?;
@@ -119,7 +120,7 @@ async fn main() -> Result<()> {
     match command {
         Commands::Chat(args) => chat(&paths, args).await?,
         Commands::Login => login().await?,
-        Commands::Logout => logout()?,
+        Commands::Logout => logout().await?,
         Commands::Status => status(&paths).await?,
         Commands::Run(args) => {
             let message = queue_task(&paths, &args.task)?;
@@ -127,6 +128,7 @@ async fn main() -> Result<()> {
         }
         Commands::Update => update().await?,
         Commands::Daemon(command) => manage_daemon(&paths, command.action)?,
+        Commands::Org => org(&paths).await?,
     }
 
     Ok(())
@@ -153,7 +155,11 @@ async fn login() -> Result<()> {
     println!(
         "  │  {}{}│",
         "Krud AI  ·  sign in"
-            .with(crossterm::style::Color::Rgb { r: 168, g: 85, b: 247 })
+            .with(crossterm::style::Color::Rgb {
+                r: 168,
+                g: 85,
+                b: 247
+            })
             .bold(),
         " ".repeat(bw.saturating_sub(23))
     );
@@ -184,7 +190,10 @@ fn read_line_maybe_hidden(hidden: bool) -> Result<String> {
     if !hidden {
         let mut buf = String::new();
         io::stdin().read_line(&mut buf)?;
-        return Ok(buf.trim_end_matches('\n').trim_end_matches('\r').to_string());
+        return Ok(buf
+            .trim_end_matches('\n')
+            .trim_end_matches('\r')
+            .to_string());
     }
 
     // Hidden mode: raw-mode + manual char accumulation so the password is not echoed.
@@ -192,7 +201,10 @@ fn read_line_maybe_hidden(hidden: bool) -> Result<String> {
     terminal::enable_raw_mode()?;
     loop {
         match event::read()? {
-            Event::Key(KeyEvent { code: KeyCode::Enter, .. }) => break,
+            Event::Key(KeyEvent {
+                code: KeyCode::Enter,
+                ..
+            }) => break,
             Event::Key(KeyEvent {
                 code: KeyCode::Char('c'),
                 modifiers: KeyModifiers::CONTROL,
@@ -202,10 +214,16 @@ fn read_line_maybe_hidden(hidden: bool) -> Result<String> {
                 println!();
                 return Err(anyhow!("Cancelled"));
             }
-            Event::Key(KeyEvent { code: KeyCode::Backspace, .. }) => {
+            Event::Key(KeyEvent {
+                code: KeyCode::Backspace,
+                ..
+            }) => {
                 password.pop();
             }
-            Event::Key(KeyEvent { code: KeyCode::Char(c), .. }) => {
+            Event::Key(KeyEvent {
+                code: KeyCode::Char(c),
+                ..
+            }) => {
                 password.push(c);
             }
             _ => {}
@@ -230,7 +248,11 @@ async fn login_with_password(client: &reqwest::Client, is_signup: bool) -> Resul
         print!("  Display name (optional): ");
         io::stdout().flush()?;
         let n = read_line_maybe_hidden(false)?.trim().to_string();
-        if n.is_empty() { None } else { Some(n) }
+        if n.is_empty() {
+            None
+        } else {
+            Some(n)
+        }
     } else {
         None
     };
@@ -249,7 +271,10 @@ async fn login_with_password(client: &reqwest::Client, is_signup: bool) -> Resul
 
     if !resp.status().is_success() {
         let status_code = resp.status();
-        let msg = resp.text().await.unwrap_or_else(|_| "unknown error".to_string());
+        let msg = resp
+            .text()
+            .await
+            .unwrap_or_else(|_| "unknown error".to_string());
         let detail = serde_json::from_str::<serde_json::Value>(&msg)
             .ok()
             .and_then(|v| v["detail"].as_str().map(|s| s.to_string()))
@@ -318,9 +343,47 @@ async fn login_with_browser(client: &reqwest::Client) -> Result<()> {
     Ok(())
 }
 
-fn logout() -> Result<()> {
+async fn logout() -> Result<()> {
+    let token = read_session_token()?;
+    if token.is_none() {
+        ui::print_success("Already logged out.");
+        return Ok(());
+    }
+    let mut remote_revoked = false;
+
+    if let Some(ref token) = token {
+        let client = authenticated_client(token)?;
+        match client
+            .post(format!("{}/v1/auth/logout", api_base_url()))
+            .send()
+            .await
+        {
+            Ok(response) if response.status().is_success() => {
+                remote_revoked = true;
+            }
+            Ok(response) if response.status() == reqwest::StatusCode::UNAUTHORIZED => {
+                remote_revoked = true;
+            }
+            Ok(response) => {
+                ui::print_info(&format!(
+                    "Remote logout returned {}. The local session will still be removed.",
+                    response.status()
+                ));
+            }
+            Err(_) => {
+                ui::print_info(
+                    "Could not confirm remote logout. The local session will still be removed.",
+                );
+            }
+        }
+    }
+
     delete_session_token()?;
-    ui::print_success("Logged out of Krud AI.");
+    if remote_revoked {
+        ui::print_success("Logged out of Krud AI.");
+    } else {
+        ui::print_success("Local session removed.");
+    }
     Ok(())
 }
 
@@ -980,6 +1043,189 @@ fn read_proposal_decision() -> Result<ProposalDecision> {
             _ => ui::print_info("Use r to run, q to queue, or s to skip."),
         }
     }
+}
+
+async fn org(paths: &AppPaths) -> Result<()> {
+    let token = read_session_token()?.expect("session token must exist before org");
+    let client = authenticated_client(&token)?;
+
+    let cwd = env::current_dir().context("Could not determine current directory")?;
+    let cwd_str = cwd.display().to_string();
+
+    // Collect top-level entries.
+    let mut files: Vec<String> = Vec::new();
+    let mut stack_hints: Vec<String> = Vec::new();
+    let stack_markers = [
+        "package.json",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "requirements.txt",
+        "pyproject.toml",
+        "setup.py",
+        "Pipfile",
+        "Cargo.toml",
+        "go.mod",
+        "pom.xml",
+        "build.gradle",
+        "Gemfile",
+        "composer.json",
+    ];
+
+    if let Ok(entries) = fs::read_dir(&cwd) {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str().map(|s| s.to_string()) {
+                if stack_markers.contains(&name.as_str()) {
+                    stack_hints.push(name.clone());
+                }
+                files.push(name);
+            }
+        }
+    }
+    files.sort();
+
+    ui::print_header(None);
+    ui::print_section_title("krud org", Some(&cwd_str));
+    ui::print_info("Analysing project structure...");
+    println!();
+
+    let body = serde_json::json!({
+        "cwd": cwd_str,
+        "files": files,
+        "stack_hints": stack_hints,
+    });
+
+    let resp = client
+        .post(format!("{}/v1/org/analyze", api_base_url()))
+        .json(&body)
+        .send()
+        .await;
+
+    let resp = match resp {
+        Ok(r) if r.status().is_success() => r,
+        Ok(r) if r.status() == reqwest::StatusCode::UNAUTHORIZED => {
+            ui::print_session_expired();
+            return Ok(());
+        }
+        Ok(r) => {
+            let msg = r.text().await.unwrap_or_default();
+            ui::print_error(&format!("Server error: {msg}"));
+            return Ok(());
+        }
+        Err(e) => {
+            ui::print_error(&format!("Request failed: {e}"));
+            return Ok(());
+        }
+    };
+
+    let analysis: OrgAnalyzeResponse = resp.json().await.context("Invalid response from server")?;
+
+    ui::print_kv("stack", &analysis.stack);
+    println!();
+    ui::print_info(&analysis.summary);
+    println!();
+
+    if analysis.actions.is_empty() {
+        ui::print_success("Project looks clean. No actions needed.");
+        return Ok(());
+    }
+
+    ui::print_section_title("proposed actions", Some(&format!("{} total", analysis.actions.len())));
+    println!();
+
+    let total = analysis.actions.len();
+    for (i, action) in analysis.actions.iter().enumerate() {
+        let label = match action.action_type.as_str() {
+            "create_file" => format!("create  {}", action.path.as_deref().unwrap_or("?")),
+            "create_dir"  => format!("mkdir   {}", action.path.as_deref().unwrap_or("?")),
+            "command"     => format!("run     {}", action.command.as_deref().unwrap_or("?")),
+            _             => action.action_type.clone(),
+        };
+
+        ui::print_command_proposal(
+            &label,
+            &action.rationale,
+            &action.risk,
+            i,
+            total,
+        );
+
+        match action.action_type.as_str() {
+            "create_file" => {
+                // Show a short preview of the file content.
+                if let Some(content) = &action.content {
+                    let preview: String = content.lines().take(6).collect::<Vec<_>>().join("\n");
+                    println!("  ┄ preview ┄");
+                    for line in preview.lines() {
+                        println!("  {line}");
+                    }
+                    if content.lines().count() > 6 {
+                        println!("  ... ({} lines total)", content.lines().count());
+                    }
+                    println!();
+                }
+                print!("  Write this file? [y/N]: ");
+                io::stdout().flush()?;
+                let mut ans = String::new();
+                io::stdin().read_line(&mut ans)?;
+                if matches!(ans.trim().to_lowercase().as_str(), "y" | "yes") {
+                    let target = cwd.join(action.path.as_deref().unwrap_or(""));
+                    if let Some(parent) = target.parent() {
+                        fs::create_dir_all(parent)?;
+                    }
+                    fs::write(&target, action.content.as_deref().unwrap_or(""))?;
+                    ui::print_success(&format!("Created {}", target.display()));
+                } else {
+                    ui::print_info("Skipped.");
+                }
+            }
+            "create_dir" => {
+                print!("  Create this directory? [y/N]: ");
+                io::stdout().flush()?;
+                let mut ans = String::new();
+                io::stdin().read_line(&mut ans)?;
+                if matches!(ans.trim().to_lowercase().as_str(), "y" | "yes") {
+                    let target = cwd.join(action.path.as_deref().unwrap_or(""));
+                    fs::create_dir_all(&target)?;
+                    ui::print_success(&format!("Created {}", target.display()));
+                } else {
+                    ui::print_info("Skipped.");
+                }
+            }
+            "command" => {
+                if let Some(cmd) = &action.command {
+                    match read_proposal_decision()? {
+                        ProposalDecision::Run => {
+                            let result = run_shell_command(cmd);
+                            match result {
+                                Ok(output) => {
+                                    if !output.is_empty() {
+                                        print!("{output}");
+                                        if !output.ends_with('\n') {
+                                            println!();
+                                        }
+                                    }
+                                    ui::print_success("Command completed.");
+                                }
+                                Err(e) => ui::print_error(&format!("Command failed: {e}")),
+                            }
+                        }
+                        ProposalDecision::Queue => {
+                            match queue_task(paths, cmd) {
+                                Ok(msg) => ui::print_success(&msg),
+                                Err(e) => ui::print_error(&format!("Could not queue: {e}")),
+                            }
+                        }
+                        ProposalDecision::Skip => ui::print_info("Skipped."),
+                    }
+                }
+            }
+            _ => {}
+        }
+        println!();
+    }
+
+    Ok(())
 }
 
 async fn update() -> Result<()> {

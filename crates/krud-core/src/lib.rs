@@ -95,6 +95,23 @@ pub struct ChatReply {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrgAction {
+    pub action_type: String, // "command" | "create_file" | "create_dir"
+    pub path: Option<String>,
+    pub content: Option<String>,
+    pub command: Option<String>,
+    pub rationale: String,
+    pub risk: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OrgAnalyzeResponse {
+    pub stack: String,
+    pub summary: String,
+    pub actions: Vec<OrgAction>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IpcRequest {
     Ping,
     QueueCommand { command: String, cwd: String },
@@ -225,7 +242,7 @@ pub fn read_session_token() -> Result<Option<String>> {
 }
 
 pub fn delete_session_token() -> Result<()> {
-    let status = Command::new("security")
+    let output = Command::new("security")
         .args([
             "delete-generic-password",
             "-s",
@@ -233,10 +250,10 @@ pub fn delete_session_token() -> Result<()> {
             "-a",
             KEYCHAIN_ACCOUNT,
         ])
-        .status()
+        .output()
         .context("Failed to delete Krud AI token from Keychain")?;
 
-    if !status.success() {
+    if !output.status.success() {
         return Err(anyhow!("macOS security command returned a non-zero status"));
     }
     Ok(())

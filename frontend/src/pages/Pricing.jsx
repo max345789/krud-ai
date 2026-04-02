@@ -5,47 +5,49 @@ import { PageIntro, Reveal, SectionHeading } from '../components/ui';
 
 const plans = [
   {
-    name: 'Free',
+    name: 'Solo',
     price: { monthly: 0, yearly: 0 },
     highlight: false,
     cta: 'Read docs',
     ctaTo: '/docs',
-    description: 'For evaluating the product loop and getting through the first install.',
+    description: 'Try the full workflow. No card required.',
     features: [
-      'Core terminal workflow',
-      'Basic output summaries',
-      'Community support',
-      'Single-operator setup',
+      'krud org — project hygiene scans',
+      'krud chat — command proposals',
+      'Trial token budget (14 days)',
+      'Approval-gated execution',
+      'Single machine',
     ],
   },
   {
-    name: 'Pro',
+    name: 'Builder',
     price: { monthly: 12, yearly: 10 },
     highlight: true,
-    badge: 'Best fit',
+    badge: 'For daily use',
     cta: 'Start trial',
     ctaTo: '/billing',
-    description: 'For people using Krud as part of their daily terminal routine.',
+    description: 'For indie devs who use Krud every day.',
     features: [
+      'Everything in Solo',
+      'Full token budget (no daily cap)',
+      'Unlimited project scans',
       'Full command history',
-      'Higher token budget',
-      'Priority product updates',
-      'Deeper model access',
-      'Billing portal access',
+      'Priority model access',
+      'Billing portal',
     ],
   },
   {
     name: 'Team',
     price: { monthly: 29, yearly: 24 },
     highlight: false,
-    cta: 'Contact',
+    cta: 'Contact us',
     ctaTo: '/contact',
-    description: 'For shared operational playbooks, onboarding, and support expectations.',
+    description: 'For small teams standardising on Krud.',
     features: [
-      'Everything in Pro',
-      'Shared operator workflows',
+      'Everything in Builder',
+      'Shared workflow templates',
       'Rollout support',
-      'Priority escalation path',
+      'Priority escalation',
       'Custom usage guidance',
     ],
   },
@@ -53,20 +55,20 @@ const plans = [
 
 const faqs = [
   {
-    q: 'Can I try Krud before paying?',
-    a: 'Yes. The product is built to let you install first, log in from the terminal, and verify the workflow before deciding on a paid plan.',
+    q: 'Do I need to pay to try krud org?',
+    a: 'No. The Solo plan is free and includes full access to krud org project hygiene scans for 14 days. No card required.',
   },
   {
-    q: 'Can I bring my own model credentials?',
-    a: 'The backend already exposes model configuration points, so bring-your-own-key support can fit cleanly into the product surface.',
+    q: 'What does Builder mainly unlock?',
+    a: 'The full token budget so you can use krud chat all day without hitting a cap, plus unlimited project scans and full command history.',
   },
   {
-    q: 'What does Pro mainly unlock?',
-    a: 'Higher budgets, deeper history, more reliable daily use, and a product path that assumes Krud is part of real terminal work instead of occasional demos.',
+    q: 'Is Krud only for Node.js and Python?',
+    a: 'Those are the stacks Krud knows best — stack detection, tailored .gitignore generation, and project structure suggestions are tuned for them. Rust, Go, and others are supported but the hygiene proposals are less opinionated.',
   },
   {
-    q: 'How should teams evaluate it?',
-    a: 'Start with one operator, validate the approval and queue model, then use the contact path for rollout and support expectations.',
+    q: 'How does the 14-day trial work?',
+    a: 'Install, sign in from the CLI, and you get Builder-level access for 14 days. After that, the free Solo plan stays available with a token budget suitable for occasional use.',
   },
 ];
 
@@ -77,16 +79,15 @@ export default function Pricing() {
     <>
       <PageIntro
         eyebrow="Pricing"
-        title="Pricing for people who actually live in a shell."
-        description="Plans are framed around operating rhythm, not startup theater. Pick the one that matches how deeply Krud is going to sit in your day."
+        title="Simple pricing for solo builders."
+        description="No seat math. No enterprise tiers hiding the good stuff. Pick the plan that matches how deeply Krud sits in your daily workflow."
         aside={
           <div className="meta-panel">
             <p>
-              Device auth, subscription enforcement, token budgets, and billing returns
-              already exist on the backend side.
+              The Solo plan gives you the full workflow for free — including krud org.
             </p>
             <p>
-              The public site now gives those flows an actual place to land.
+              Builder unlocks the token budget for daily use without hitting a wall.
             </p>
           </div>
         }
@@ -107,7 +108,7 @@ export default function Pricing() {
             <span>{yearly ? 'Approx. 20% lower monthly rate' : 'Switch to yearly to reduce cost'}</span>
           </div>
 
-          <div className="pricing-grid" style={{ marginTop: '2rem' }}>
+          <div className="pricing-grid pricing-grid--spaced">
             {plans.map((plan, index) => (
               <Reveal
                 key={plan.name}
@@ -150,33 +151,32 @@ export default function Pricing() {
           <Reveal>
             <SectionHeading
               eyebrow="How to decide"
-              title="Roll out by operating rhythm, not vanity seat math."
-              description="The point is to match the plan to the level of trust and repetition in the work, not to drown someone in enterprise filler."
+              title="Start with Solo. Upgrade when Krud becomes part of your daily flow."
+              description="The upgrade moment is clear: when you hit the token cap and want to keep going, Builder is the right move."
             />
             <ul className="comparison-list">
               <li>
-                <strong>Free:</strong> evaluate the install, login, and command loop.
+                <strong>Solo (free):</strong> install, run krud org, validate the whole workflow during your 14-day trial.
               </li>
               <li>
-                <strong>Pro:</strong> use Krud daily with history, budget headroom, and stronger product support.
+                <strong>Builder ($12/mo):</strong> use krud chat and krud org every day without limits.
               </li>
               <li>
-                <strong>Team:</strong> standardize how multiple operators adopt the tool and escalate issues.
+                <strong>Team ($29/mo):</strong> standardise the tool across a small team with rollout support.
               </li>
             </ul>
           </Reveal>
 
           <Reveal delay={0.1} className="story-panel">
-            <p className="story-kicker">What the UI optimizes for</p>
+            <p className="story-kicker">What the Builder plan is for</p>
             <ul className="plan-list">
-              <li>Honest plan framing instead of vanity comparison clutter.</li>
-              <li>One featured choice for the most likely buyer path.</li>
-              <li>Direct follow-up routes into docs or contact, depending on maturity.</li>
+              <li>Running krud org on every new project without thinking about it.</li>
+              <li>Using krud chat throughout a full work session, not just occasionally.</li>
+              <li>Keeping full command history so context carries across sessions.</li>
             </ul>
             <div className="button-row">
-              <Link to="/contact" className="button button-secondary">
-                <LifeBuoy size={15} />
-                Talk through rollout
+              <Link to="/billing" className="button button-secondary">
+                Start 14-day trial
               </Link>
             </div>
           </Reveal>
@@ -188,8 +188,8 @@ export default function Pricing() {
           <Reveal>
             <SectionHeading
               eyebrow="FAQ"
-              title="Questions that help someone decide in one sitting."
-              description="These are the blockers worth answering before someone commits the product to their workflow."
+              title="Quick answers before you install."
+              description="These are the questions worth settling before Krud becomes part of your workflow."
             />
           </Reveal>
           <div className="faq-list">
@@ -202,7 +202,7 @@ export default function Pricing() {
           </div>
           <div className="button-row">
             <Link to="/contact" className="button button-primary">
-              Contact for rollout
+              Questions? Contact us
               <ArrowRight size={15} />
             </Link>
           </div>
