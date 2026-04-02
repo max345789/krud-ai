@@ -20,6 +20,14 @@ pub enum SubscriptionStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthTokenResponse {
+    pub token: String,
+    pub email: String,
+    pub name: Option<String>,
+    pub subscription_status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeviceStartResponse {
     pub device_code: String,
     pub user_code: String,
